@@ -1,1 +1,7 @@
 target/
+
+# H2 本地数据库文件（运行时产物，勿提交）
+data/
+
+# test / e2e logs
+*.log

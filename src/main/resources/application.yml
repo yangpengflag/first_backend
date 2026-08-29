@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    # 文件模式：重启后数据仍在。注意 H2 文件库不支持多进程并发，
+    # 后端已启动时跑集成测试会因数据库被占用而失败——先停后端即可。
+    url: jdbc:h2:file:./data/wanderchina;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
+
+  h2:
+    console:
+      enabled: false
+
+server:
+  port: 8080
+
+app:
+  cors:
+    # 允许调用本服务的前端来源。生产环境必须显式列出，禁止使用 "*"
+    allowed-origins:
+      - http://localhost:3000
+  # 前端站点地址，用于拼接邮件中的验证 / 重置链接
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+
+auth:
+  jwt:
+    # HS256 要求密钥 >= 32 字节；生产环境必须通过 JWT_SECRET 环境变量注入
+    secret: ${JWT_SECRET:wanderchina-dev-jwt-secret-key-change-me-in-production-0123456789abcdef}
+    access-token-ttl-minutes: 15
+    refresh-token-ttl-days: 7
+
+  bcrypt:
+    strength: 10
+
+  mail:
+    # 验证码属一次性凭证，默认禁止写入日志；本地调试可临时置为 true
+    log-verification-code: false
+
+  # 状态机与锁定策略常量（见 openspec/specs/auth-module/spec.md）
+  verification-code-ttl-hours: 24
+  max-failed-attempts: 5
+  lock-duration-minutes: 15
+
+  rate-limit:
+    login-per-ip-per-15m: 10
+    login-per-ip-email-per-15m: 5
+    register-per-ip-per-hour: 5
+    resend-per-ip-per-hour: 10
+    resend-per-ip-email-per-24h: 3
+    # 忘记密码与重发验证取齐，避免两个语义相近的端点各自维护一套数字
+    forgot-password-per-ip-per-hour: 10
+    forgot-password-per-ip-email-per-24h: 3
+    reset-password-per-ip-per-hour: 10
