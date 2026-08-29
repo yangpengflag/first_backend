@@ -9,6 +9,7 @@ import com.mooc.backend.auth.security.UserStatusFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -88,6 +89,10 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         // 脚手架遗留端点，与本 change 无关，保持其原有可访问性
                         .requestMatchers("/api/hello").permitAll()
+                        // 帖子公开读端点（列表 / 详情）免鉴权；写操作与 /me 仍走 anyRequest().authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/posts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/posts/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/posts/*").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Spring Security 默认对未认证请求返回 403；本项目要求 401

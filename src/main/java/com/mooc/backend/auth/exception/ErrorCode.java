@@ -46,6 +46,12 @@ public enum ErrorCode {
     /** 触发限流。 */
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
 
+    /** 帖子不存在、已被软删，或非公开（DRAFT）状态。 */
+    POST_NOT_FOUND(HttpStatus.NOT_FOUND, "Post not found."),
+
+    /** 当前用户不是该帖子的作者，无权编辑。 */
+    NOT_POST_AUTHOR(HttpStatus.FORBIDDEN, "You are not the author of this post."),
+
     /** 未预期的服务端错误。 */
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.");
 

@@ -1,6 +1,7 @@
 package com.mooc.backend.auth.exception;
 
 import com.mooc.backend.auth.api.ErrorResponse;
+import com.mooc.backend.posts.exception.PostException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ErrorResponse> handleAuthException(AuthException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
+    }
+
+    @ExceptionHandler(PostException.class)
+    public ResponseEntity<ErrorResponse> handlePostException(PostException ex) {
         return ResponseEntity.status(ex.getStatus())
                 .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
     }
