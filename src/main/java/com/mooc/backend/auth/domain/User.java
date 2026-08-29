@@ -1,17 +1,17 @@
 package com.mooc.backend.auth.domain;
 
+import com.mooc.backend.common.BaseEntity;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -25,11 +25,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users", uniqueConstraints = @UniqueConstraint(name = "uk_users_email", columnNames = "email"))
-public class User {
-
-    @Id
-    @Column(nullable = false, updatable = false)
-    private UUID id;
+public class User extends BaseEntity {
 
     @Column(nullable = false, unique = true)
     private String email;
@@ -83,21 +79,12 @@ public class User {
     @Column(name = "password_changed_at")
     private Instant passwordChangedAt;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
     protected User() {
         // JPA only
     }
 
     private User(UUID id, String email, String passwordHash, String displayName, Instant now) {
-        this.id = id;
+        super(id, now);
         this.email = email;
         this.passwordHash = passwordHash;
         this.salt = null;
@@ -105,8 +92,6 @@ public class User {
         this.avatarUrl = null;
         this.status = UserStatus.EMAIL_UNVERIFIED;
         this.failedAttempts = 0;
-        this.createdAt = now;
-        this.updatedAt = now;
     }
 
     /**
@@ -127,7 +112,7 @@ public class User {
     public void issueVerificationCode(String code, Instant now, Duration ttl) {
         this.verificationCode = code;
         this.verificationCodeExpiresAt = now.plus(ttl);
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     /**
@@ -148,7 +133,7 @@ public class User {
         this.verificationCodeExpiresAt = null;
         this.status = UserStatus.ACTIVE;
         this.failedAttempts = 0;
-        this.updatedAt = now;
+        this.touch(now);
         return true;
     }
 
@@ -180,7 +165,7 @@ public class User {
             this.status = UserStatus.LOCKED;
             this.lockedUntil = now.plus(lockDuration);
         }
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     /** 锁定期届满后自动解锁。 */
@@ -191,7 +176,7 @@ public class User {
             this.status = UserStatus.ACTIVE;
             this.lockedUntil = null;
             this.failedAttempts = 0;
-            this.updatedAt = now;
+            this.touch(now);
         }
     }
 
@@ -199,7 +184,7 @@ public class User {
     public void recordSuccessfulLogin(Instant now) {
         this.failedAttempts = 0;
         this.lockedUntil = null;
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     // ---------- 密码重置 ----------
@@ -208,7 +193,7 @@ public class User {
     public void issuePasswordResetCode(String code, Instant now, Duration ttl) {
         this.passwordResetCode = code;
         this.passwordResetCodeExpiresAt = now.plus(ttl);
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     /**
@@ -227,7 +212,7 @@ public class User {
         }
         this.passwordResetCode = null;
         this.passwordResetCodeExpiresAt = null;
-        this.updatedAt = now;
+        this.touch(now);
         return true;
     }
 
@@ -248,7 +233,7 @@ public class User {
         if (this.status == UserStatus.LOCKED || this.status == UserStatus.EMAIL_UNVERIFIED) {
             this.status = UserStatus.ACTIVE;
         }
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     /**
@@ -272,14 +257,10 @@ public class User {
         this.deletedAt = now;
         this.verificationCode = null;
         this.verificationCodeExpiresAt = null;
-        this.updatedAt = now;
+        this.touch(now);
     }
 
     // ---------- 访问器 ----------
-
-    public UUID getId() {
-        return id;
-    }
 
     public String getEmail() {
         return email;
@@ -321,18 +302,6 @@ public class User {
         return lockedUntil;
     }
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public Instant getDeletedAt() {
-        return deletedAt;
-    }
-
     public String getPasswordResetCode() {
         return passwordResetCode;
     }
@@ -347,27 +316,11 @@ public class User {
 
     public void setDisplayName(String displayName) {
         this.displayName = displayName;
-        this.updatedAt = Instant.now();
+        this.touch(Instant.now());
     }
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
-        this.updatedAt = Instant.now();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof User other)) {
-            return false;
-        }
-        return id != null && id.equals(other.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(id);
+        this.touch(Instant.now());
     }
 }
