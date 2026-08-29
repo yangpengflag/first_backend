@@ -60,3 +60,30 @@ auth:
     forgot-password-per-ip-per-hour: 10
     forgot-password-per-ip-email-per-24h: 3
     reset-password-per-ip-per-hour: 10
+
+# OpenAPI 文档产出（change: openapi-integration）
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+# 生产环境必须关闭文档：暴露 /v3/api-docs 等于把端点清单与请求样例直接摊开给攻击者。
+#
+# 两个坑，缺一不可（均由实现验证暴露，非纸面推演）：
+# 1. 若不关闭端点：springdoc 路径已在 SecurityConfig.PUBLIC_ENDPOINTS 放行，
+#    未认证访问会命中 Spring Security 返回 401，而 401 泄露「该路径存在」——不如 404。
+# 2. 仅关闭端点还不够：关闭后请求落到 Spring Boot 默认的 /** 静态资源处理器，
+#    后者找不到资源会抛 NoResourceFoundException（Spring Framework 6.2 起的行为），
+#    被 GlobalExceptionHandler 的兜底 @ExceptionHandler(Exception.class) 吞成 500。
+#    已在 GlobalExceptionHandler 中显式处理该异常 → 404（详见该类注释）。
+spring:
+  config:
+    activate:
+      on-profile: prod
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

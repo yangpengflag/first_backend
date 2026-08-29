@@ -40,7 +40,14 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** 免鉴权端点。 */
+    /**
+     * 免鉴权端点。
+     *
+     * <p>末尾四项为 OpenAPI 文档路径（change: openapi-integration）。它们必须显式放行：
+     * 若不放行，{@code anyRequest().authenticated()} 会令未认证请求返回 <b>401</b>，
+     * 而 401 会泄露「该路径存在」这一事实，反而不如 404 安全。放行后 prod 下
+     * （springdoc 已禁用）请求落到资源未注册的 <b>404</b>，既满足 spec 也不泄露信息。
+     */
     public static final String[] PUBLIC_ENDPOINTS = {
             "/api/auth/register",
             "/api/auth/login",
@@ -48,7 +55,11 @@ public class SecurityConfig {
             "/api/auth/resend-verification",
             "/api/auth/refresh",
             "/api/auth/forgot-password",
-            "/api/auth/reset-password"
+            "/api/auth/reset-password",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/swagger-ui.html",
+            "/swagger-ui/**"
     };
 
     private final int bcryptStrength;

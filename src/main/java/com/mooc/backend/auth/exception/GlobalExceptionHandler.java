@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -48,6 +49,25 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of(ErrorCode.VALIDATION_FAILED, "Malformed request body."));
+    }
+
+    /**
+     * 未匹配到任何静态资源。
+     *
+     * <p>Spring Framework 6.2 起 {@code ResourceHttpRequestHandler} 找不到资源时
+     * <b>抛异常</b>而非直接写 404。若不显式处理，会落到下方兜底处理器变成 500——
+     * 把「路径不存在」误报成服务端故障：既违背 HTTP 语义，也让外部探测行为
+     * 污染错误日志（真正的 5xx 告警会被淹没）。
+     *
+     * <p>本处理器与本 change 直接相关：prod 下 springdoc 已禁用，{@code /v3/api-docs}
+     * 与 {@code /swagger-ui/**} 无对应资源，正是走这条分支返回 <b>404</b>——
+     * 而非 401（泄露路径存在）或 500（误报服务端故障）。
+     *
+     * <p>响应体为空：404 不返回业务错误信封，不泄露任何端点清单信息。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException ex) {
+        return ResponseEntity.notFound().build();
     }
 
     /**

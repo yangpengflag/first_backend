@@ -16,6 +16,8 @@
 	<properties>
 		<java.version>17</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- 与 Spring Boot 3.5 兼容的 springdoc 版本（本地仓库已缓存，可离线构建） -->
+		<springdoc.version>2.8.8</springdoc.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -55,6 +57,12 @@
 			<artifactId>jjwt-jackson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+		<!-- OpenAPI 文档产出（change: openapi-integration）：/v3/api-docs + Swagger UI -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
