@@ -86,11 +86,11 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         AuthTokenResponse tokens = objectMapper.readValue(loginJson, AuthTokenResponse.class);
-        assertThat(tokens.accessToken()).isNotBlank();
-        assertThat(tokens.refreshToken()).isNotBlank();
-        assertThat(tokens.user().status()).isEqualTo("ACTIVE");
+        assertThat(tokens.getAccessToken()).isNotBlank();
+        assertThat(tokens.getRefreshToken()).isNotBlank();
+        assertThat(tokens.getUser().getStatus()).isEqualTo("ACTIVE");
 
-        String bearer = "Bearer " + tokens.accessToken();
+        String bearer = "Bearer " + tokens.getAccessToken();
 
         // 5) 当前用户 → 200，返回一致的邮箱
         String meJson = mockMvc.perform(get("/api/auth/me")
@@ -98,8 +98,8 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         UserResponse me = objectMapper.readValue(meJson, UserResponse.class);
-        assertThat(me.email()).isEqualTo(EMAIL);
-        assertThat(me.status()).isEqualTo("ACTIVE");
+        assertThat(me.getEmail()).isEqualTo(EMAIL);
+        assertThat(me.getStatus()).isEqualTo("ACTIVE");
 
         // 6) 登出 → 204
         mockMvc.perform(post("/api/auth/logout")

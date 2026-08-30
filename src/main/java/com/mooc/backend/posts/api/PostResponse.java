@@ -1,6 +1,8 @@
 package com.mooc.backend.posts.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.mooc.backend.dto.response.BaseResponse;
 import com.mooc.backend.posts.domain.Post;
 
 import java.time.Instant;
@@ -9,31 +11,51 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 帖子详情出网白名单 DTO（camelCase，与 {@code UserResponse} 保持一致）。
+ * 帖子详情出网白名单 DTO（snake_case，对齐 backend-conventions）。
  *
- * <p>结构性白名单：输出键严格等于 {@link #WHITELISTED_FIELDS}，绝不暴露 {@code deletedAt}
- * 等审计字段；作者信息仅限 {@code authorName} / {@code authorAvatarUrl}，
+ * <p>结构性白名单：输出键严格等于 {@link #WHITELISTED_FIELDS}，绝不暴露 {@code deleted_at}
+ * 等审计字段；作者信息仅限 {@code author_name} / {@code author_avatar_url}，
  * 不得携带 {@code email} 等隐私字段。由 {@code PostResponseSerializationTest} 断言回归。
+ * 继承 {@code BaseResponse} 自带 request_id。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
-public record PostResponse(
-        UUID id,
-        String title,
-        String content,
-        String coverImageUrl,
-        List<String> tags,
-        String status,
-        UUID authorId,
-        String authorName,
-        String authorAvatarUrl,
-        String summary,
-        Instant createdAt,
-        Instant updatedAt
-) {
+public class PostResponse extends BaseResponse {
+
+    @JsonProperty("id") private final UUID id;
+    @JsonProperty("title") private final String title;
+    @JsonProperty("content") private final String content;
+    @JsonProperty("cover_image_url") private final String coverImageUrl;
+    @JsonProperty("tags") private final List<String> tags;
+    @JsonProperty("status") private final String status;
+    @JsonProperty("author_id") private final UUID authorId;
+    @JsonProperty("author_name") private final String authorName;
+    @JsonProperty("author_avatar_url") private final String authorAvatarUrl;
+    @JsonProperty("summary") private final String summary;
+    @JsonProperty("created_at") private final Instant createdAt;
+    @JsonProperty("updated_at") private final Instant updatedAt;
+
+    public PostResponse(UUID id, String title, String content, String coverImageUrl, List<String> tags,
+                        String status, UUID authorId, String authorName, String authorAvatarUrl,
+                        String summary, Instant createdAt, Instant updatedAt) {
+        super();
+        this.id = id;
+        this.title = title;
+        this.content = content;
+        this.coverImageUrl = coverImageUrl;
+        this.tags = tags;
+        this.status = status;
+        this.authorId = authorId;
+        this.authorName = authorName;
+        this.authorAvatarUrl = authorAvatarUrl;
+        this.summary = summary;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
 
     public static final Set<String> WHITELISTED_FIELDS = Set.of(
-            "id", "title", "content", "coverImageUrl", "tags", "status",
-            "authorId", "authorName", "authorAvatarUrl", "summary", "createdAt", "updatedAt");
+            "id", "title", "content", "cover_image_url", "tags", "status",
+            "author_id", "author_name", "author_avatar_url", "summary", "created_at", "updated_at",
+            "request_id");
 
     public static PostResponse from(Post post, String authorName, String authorAvatarUrl, String summary) {
         return new PostResponse(
@@ -50,4 +72,17 @@ public record PostResponse(
                 post.getCreatedAt(),
                 post.getUpdatedAt());
     }
+
+    public UUID getId() { return id; }
+    public String getTitle() { return title; }
+    public String getContent() { return content; }
+    public String getCoverImageUrl() { return coverImageUrl; }
+    public List<String> getTags() { return tags; }
+    public String getStatus() { return status; }
+    public UUID getAuthorId() { return authorId; }
+    public String getAuthorName() { return authorName; }
+    public String getAuthorAvatarUrl() { return authorAvatarUrl; }
+    public String getSummary() { return summary; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

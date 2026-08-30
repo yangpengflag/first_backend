@@ -106,7 +106,7 @@ class TokenInvalidationTest {
                 .andExpect(status().isUnauthorized());
 
         // 改密后重新签发的令牌正常
-        String freshToken = authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).accessToken();
+        String freshToken = authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).getAccessToken();
 
         mockMvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + freshToken))
                 .andExpect(status().isOk())

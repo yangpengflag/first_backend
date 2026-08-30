@@ -106,6 +106,6 @@ class PasswordResetNotificationFailureTest {
 
         assertThat(passwordHasher.matches(NEW_PASSWORD,
                 userRepository.findByEmail(EMAIL).orElseThrow().getPasswordHash())).isTrue();
-        assertThat(authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).accessToken()).isNotBlank();
+        assertThat(authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).getAccessToken()).isNotBlank();
     }
 }

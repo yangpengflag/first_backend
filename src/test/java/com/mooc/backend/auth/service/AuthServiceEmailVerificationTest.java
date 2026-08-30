@@ -70,7 +70,7 @@ class AuthServiceEmailVerificationTest {
 
         UserResponse response = authService.verifyEmail(code);
 
-        assertThat(response.status()).isEqualTo("ACTIVE");
+        assertThat(response.getStatus()).isEqualTo("ACTIVE");
         User saved = userRepository.findByEmail(EMAIL).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(saved.getVerificationCode()).isNull();
@@ -179,12 +179,12 @@ class AuthServiceEmailVerificationTest {
         String freshCode = userRepository.findByEmail(EMAIL).orElseThrow().getVerificationCode();
 
         // 3) 凭邮件链接中的 code 完成验证（免鉴权）
-        assertThat(authService.verifyEmail(freshCode).status()).isEqualTo("ACTIVE");
+        assertThat(authService.verifyEmail(freshCode).getStatus()).isEqualTo("ACTIVE");
 
         // 4) 现已可正常登录
         AuthTokenResponse tokens = authService.login(new LoginRequest(EMAIL, PASSWORD));
-        assertThat(tokens.accessToken()).isNotBlank();
-        assertThat(tokens.refreshToken()).isNotBlank();
-        assertThat(tokens.user().status()).isEqualTo("ACTIVE");
+        assertThat(tokens.getAccessToken()).isNotBlank();
+        assertThat(tokens.getRefreshToken()).isNotBlank();
+        assertThat(tokens.getUser().getStatus()).isEqualTo("ACTIVE");
     }
 }

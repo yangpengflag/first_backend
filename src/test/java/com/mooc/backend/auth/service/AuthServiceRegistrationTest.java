@@ -54,11 +54,11 @@ class AuthServiceRegistrationTest {
         UserResponse response = authService.register(
                 new RegisterRequest("Alice@Example.com", PASSWORD, "Alice"));
 
-        assertThat(response.status()).isEqualTo("EMAIL_UNVERIFIED");
-        assertThat(response.email()).isEqualTo("alice@example.com");
-        assertThat(response.displayName()).isEqualTo("Alice");
-        assertThat(response.id()).isNotNull();
-        assertThat(response.createdAt()).isEqualTo(NOW);
+        assertThat(response.getStatus()).isEqualTo("EMAIL_UNVERIFIED");
+        assertThat(response.getEmail()).isEqualTo("alice@example.com");
+        assertThat(response.getDisplayName()).isEqualTo("Alice");
+        assertThat(response.getId()).isNotNull();
+        assertThat(response.getCreatedAt()).isEqualTo(NOW);
     }
 
     @Test

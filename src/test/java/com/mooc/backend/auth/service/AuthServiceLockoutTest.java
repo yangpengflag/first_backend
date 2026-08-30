@@ -168,7 +168,7 @@ class AuthServiceLockoutTest {
 
         AuthTokenResponse response = authService.login(new LoginRequest(EMAIL, PASSWORD));
 
-        assertThat(response.accessToken()).isNotBlank();
+        assertThat(response.getAccessToken()).isNotBlank();
         User unlocked = reload();
         assertThat(unlocked.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(unlocked.getLockedUntil()).isNull();

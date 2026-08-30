@@ -6,7 +6,10 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mooc.backend.posts.domain.Post;
 import com.mooc.backend.posts.domain.PostStatus;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -23,6 +26,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 且不泄露 {@code deleted_at} / 作者 {@code email} 等字段。
  */
 class PostResponseSerializationTest {
+
+    @BeforeEach
+    void setUp() {
+        MDC.put("requestId", "test-request-id");
+    }
+
+    @AfterEach
+    void tearDown() {
+        MDC.clear();
+    }
 
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private static final Instant NOW = Instant.parse("2026-08-28T10:00:00Z");

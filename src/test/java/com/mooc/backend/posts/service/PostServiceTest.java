@@ -61,10 +61,10 @@ class PostServiceTest {
 
         PostResponse resp = postService.create(AUTHOR, req, NOW);
 
-        assertThat(resp.authorId()).isEqualTo(AUTHOR);
-        assertThat(resp.authorName()).isEqualTo("Alice");
-        assertThat(resp.tags()).containsExactly("hiking", "sichuan");
-        assertThat(resp.summary()).isEqualTo("Hello world");
+        assertThat(resp.getAuthorId()).isEqualTo(AUTHOR);
+        assertThat(resp.getAuthorName()).isEqualTo("Alice");
+        assertThat(resp.getTags()).containsExactly("hiking", "sichuan");
+        assertThat(resp.getSummary()).isEqualTo("Hello world");
     }
 
     @Test
@@ -78,7 +78,7 @@ class PostServiceTest {
         Page<PostSummary> page = postService.listPublished(0, 20, NOW);
 
         assertThat(page.getContent()).hasSize(1);
-        assertThat(page.getContent().get(0).authorName()).isEqualTo("Alice");
+        assertThat(page.getContent().get(0).getAuthorName()).isEqualTo("Alice");
     }
 
     @Test
@@ -121,7 +121,7 @@ class PostServiceTest {
         PostResponse resp = postService.update(post.getId(), AUTHOR,
                 new UpdatePostRequest(null, null, null, null, PostStatus.PUBLISHED), NOW);
 
-        assertThat(resp.status()).isEqualTo("PUBLISHED");
+        assertThat(resp.getStatus()).isEqualTo("PUBLISHED");
     }
 
     @Test

@@ -89,8 +89,8 @@ class PostsControllerIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON).content(createJson))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.authorId").value(authorA.toString()))
-                .andExpect(jsonPath("$.authorName").value("Alice"))
+                .andExpect(jsonPath("$.author_id").value(authorA.toString()))
+                .andExpect(jsonPath("$.author_name").value("Alice"))
                 .andReturn().getResponse().getContentAsString();
         UUID postId = extractId(body);
 
@@ -114,8 +114,8 @@ class PostsControllerIntegrationTest {
         mockMvc.perform(get("/api/posts"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].authorName").value("Alice"))
-                .andExpect(jsonPath("$.content[0].authorId").value(authorA.toString()));
+                .andExpect(jsonPath("$.content[0].author_name").value("Alice"))
+                .andExpect(jsonPath("$.content[0].author_id").value(authorA.toString()));
 
         // 公开详情：派生 summary，且不含 deleted_at / email
         mockMvc.perform(get("/api/posts/" + postId))

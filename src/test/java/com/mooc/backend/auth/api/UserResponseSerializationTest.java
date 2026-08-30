@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mooc.backend.auth.domain.User;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -22,6 +25,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link UserResponse} 才会出网。
  */
 class UserResponseSerializationTest {
+
+    @BeforeEach
+    void setUp() {
+        MDC.put("requestId", "test-request-id");
+    }
+
+    @AfterEach
+    void tearDown() {
+        MDC.clear();
+    }
 
     private static final Instant NOW = Instant.parse("2026-08-28T10:00:00Z");
 
@@ -77,11 +90,11 @@ class UserResponseSerializationTest {
 
         UserResponse response = UserResponse.from(user);
 
-        assertThat(response.id()).isEqualTo(user.getId());
-        assertThat(response.email()).isEqualTo("alice@example.com");
-        assertThat(response.displayName()).isEqualTo("Alice");
-        assertThat(response.status()).isEqualTo(UserStatusHolder.EMAIL_UNVERIFIED_NAME);
-        assertThat(response.createdAt()).isEqualTo(NOW);
+        assertThat(response.getId()).isEqualTo(user.getId());
+        assertThat(response.getEmail()).isEqualTo("alice@example.com");
+        assertThat(response.getDisplayName()).isEqualTo("Alice");
+        assertThat(response.getStatus()).isEqualTo(UserStatusHolder.EMAIL_UNVERIFIED_NAME);
+        assertThat(response.getCreatedAt()).isEqualTo(NOW);
     }
 
     @Test

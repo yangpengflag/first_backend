@@ -72,17 +72,17 @@ class AuthServiceLoginStateMachineTest {
 
         AuthTokenResponse response = authService.login(new LoginRequest(EMAIL, PASSWORD));
 
-        assertThat(response.accessToken()).isNotBlank();
-        assertThat(response.refreshToken()).isNotBlank();
-        assertThat(response.user().status()).isEqualTo("ACTIVE");
-        assertThat(response.user().email()).isEqualTo(EMAIL);
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getUser().getStatus()).isEqualTo("ACTIVE");
+        assertThat(response.getUser().getEmail()).isEqualTo(EMAIL);
     }
 
     @Test
     void loginIsCaseInsensitiveOnEmail() {
         registerAndActivate(EMAIL);
 
-        assertThat(authService.login(new LoginRequest("ALICE@EXAMPLE.COM", PASSWORD)).accessToken())
+        assertThat(authService.login(new LoginRequest("ALICE@EXAMPLE.COM", PASSWORD)).getAccessToken())
                 .isNotBlank();
     }
 

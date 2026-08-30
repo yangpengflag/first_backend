@@ -144,7 +144,7 @@ class AuthServicePasswordResetTest {
 
         authService.resetPassword(new ResetPasswordRequest(code, NEW_PASSWORD));
 
-        assertThat(authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).accessToken()).isNotBlank();
+        assertThat(authService.login(new LoginRequest(EMAIL, NEW_PASSWORD)).getAccessToken()).isNotBlank();
     }
 
     @Test
