@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -84,6 +85,14 @@ public class PostsController {
             @Valid @RequestBody UpdatePostRequest request) {
         UUID authorId = currentUserId();
         return ResponseEntity.ok(postService.update(id, authorId, request, Instant.now()));
+    }
+
+    @Operation(summary = "删除帖子（软删除）", description = "仅作者本人可删；软删除保留行，自动从所有列表 / 详情消失。")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        UUID authorId = currentUserId();
+        postService.delete(id, authorId, Instant.now());
+        return ResponseEntity.noContent().build();
     }
 
     /** 从 SecurityContext 取当前用户标识（JWT 主体为 UUID 字符串）。 */

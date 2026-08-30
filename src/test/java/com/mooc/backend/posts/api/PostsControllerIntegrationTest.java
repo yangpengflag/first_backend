@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -163,6 +164,34 @@ class PostsControllerIntegrationTest {
                         .content("{\"status\":\"PUBLISHED\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("NOT_POST_AUTHOR"));
+    }
+
+    @Test
+    void deleteSoftRemovesPost() throws Exception {
+        String body = mockMvc.perform(post("/api/posts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"ToDelete\",\"content\":\"c\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        UUID postId = extractId(body);
+
+        // 未带令牌删除 → 401
+        mockMvc.perform(delete("/api/posts/" + postId))
+                .andExpect(status().isUnauthorized());
+
+        // 他人删除 → 403
+        String tokenB = activatedUser(EMAIL_B, "Bob");
+        mockMvc.perform(delete("/api/posts/" + postId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenB))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("NOT_POST_AUTHOR"));
+
+        // 作者删除 → 204，且从详情消失
+        mockMvc.perform(delete("/api/posts/" + postId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/posts/" + postId)).andExpect(status().isNotFound());
     }
 
     private UUID extractId(String json) throws Exception {

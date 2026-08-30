@@ -111,6 +111,17 @@ public class PostService {
                 MarkdownSummary.derive(saved.getContent()));
     }
 
+    /** 删除（软删除）：仅作者本人；非作者 403，不存在 404，成功 204。 */
+    public void delete(UUID id, UUID authorId, Instant now) {
+        Post post = postRepository.findByIdAndDeletedFalse(id)
+                .orElseThrow(() -> new PostException(ErrorCode.POST_NOT_FOUND));
+        if (!post.getAuthorId().equals(authorId)) {
+            throw new PostException(ErrorCode.NOT_POST_AUTHOR);
+        }
+        post.softDelete(now);
+        postRepository.save(post);
+    }
+
     /** 我的帖子：当前用户全部状态（含 DRAFT），软删已被查询层 AndDeletedFalse 排除。 */
     public Page<PostSummary> listMine(UUID authorId, int page, int size, Instant now) {
         int safeSize = clampSize(size);

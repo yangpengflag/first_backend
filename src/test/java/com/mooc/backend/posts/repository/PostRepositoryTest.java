@@ -18,7 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 仓储层测试：验证 {@code AndDeletedFalse} 查询层软删过滤与 tags 集合持久化。
+ * 仓储层测试：验证 {@code AndDeletedFalse} 查询层软删过滤与 tags JSON 列持久化。
  *
  * <p>软删通过原生 UPDATE + 清空持久化上下文模拟，确保查询真正落库并应用过滤条件。
  */

@@ -125,6 +125,26 @@ class PostServiceTest {
     }
 
     @Test
+    void deleteRejectsNonAuthor() {
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, NOW);
+        when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
+
+        assertThatThrownBy(() -> postService.delete(post.getId(), UUID.randomUUID(), NOW))
+                .isInstanceOf(PostException.class);
+    }
+
+    @Test
+    void deleteSoftRemovesPost() {
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.PUBLISHED, NOW);
+        when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
+        when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        postService.delete(post.getId(), AUTHOR, NOW);
+
+        assertThat(post.isDeleted()).isTrue();
+    }
+
+    @Test
     void listMineReturnsAllStatuses() {
         User alice = activeUser(AUTHOR, "Alice", null);
         Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, NOW);

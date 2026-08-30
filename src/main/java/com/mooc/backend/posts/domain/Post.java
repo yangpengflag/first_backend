@@ -2,15 +2,14 @@ package com.mooc.backend.posts.domain;
 
 import com.mooc.backend.common.BaseEntity;
 
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,9 +45,8 @@ public class Post extends BaseEntity {
     @Column(nullable = false, length = 16)
     private PostStatus status;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "post_tags", joinColumns = @JoinColumn(name = "post_id"))
-    @Column(name = "tag", length = 30)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tags", nullable = false)
     private List<String> tags = new ArrayList<>();
 
     protected Post() {
@@ -81,6 +79,12 @@ public class Post extends BaseEntity {
         this.tags.clear();
         this.tags.addAll(tags);
         this.status = status;
+        this.touch(now);
+    }
+
+    /** 软删除：置 deleted 标志并刷新更新时间（行保留，查询层 AndDeletedFalse 自动排除）。 */
+    public void softDelete(Instant now) {
+        this.markDeleted();
         this.touch(now);
     }
 
