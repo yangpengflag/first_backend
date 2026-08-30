@@ -249,12 +249,12 @@ public class User extends BaseEntity {
     // ---------- 软删除 ----------
 
     /**
-     * 软删除：行保留、写入 deletedAt、清空验证码。
+     * 软删除：行保留、置 {@code deleted} 标志、清空验证码。
      * 邮箱唯一约束不释放，防止同一邮箱重复注册。
      */
     public void softDelete(Instant now) {
         this.status = UserStatus.DELETED;
-        this.deletedAt = now;
+        this.markDeleted();
         this.verificationCode = null;
         this.verificationCodeExpiresAt = null;
         this.touch(now);

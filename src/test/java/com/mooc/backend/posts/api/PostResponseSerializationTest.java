@@ -59,6 +59,6 @@ class PostResponseSerializationTest {
                 List.of(), PostStatus.PUBLISHED, NOW);
         String json = mapper.writeValueAsString(PostResponse.from(post, "Alice", null, "summary"));
 
-        assertThat(json).doesNotContain("deleted_at").doesNotContain("deletedAt").doesNotContain("\"email\"");
+        assertThat(json).doesNotContain("deleted").doesNotContain("deleted_at").doesNotContain("deletedAt").doesNotContain("\"email\"");
     }
 }

@@ -79,7 +79,7 @@ class UserResponseSerializationTest {
         assertThat(json).doesNotContain(
                 "failedAttempts", "failed_attempts",
                 "lockedUntil", "locked_until",
-                "deletedAt", "deleted_at",
+                "deleted", "deletedAt", "deleted_at",
                 "updatedAt", "updated_at"
         );
     }

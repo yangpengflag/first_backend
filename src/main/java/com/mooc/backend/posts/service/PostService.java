@@ -69,7 +69,7 @@ public class PostService {
     public Page<PostSummary> listPublished(int page, int size, Instant now) {
         int safeSize = clampSize(size);
         Pageable pageable = buildPageable(page, safeSize);
-        Page<Post> postPage = postRepository.findByStatus(PostStatus.PUBLISHED, pageable);
+        Page<Post> postPage = postRepository.findByStatusAndDeletedFalse(PostStatus.PUBLISHED, pageable);
         Map<UUID, AuthorView> authors = resolveAuthors(
                 postPage.getContent().stream().map(Post::getAuthorId).distinct().toList());
         List<PostSummary> items = postPage.getContent().stream()
@@ -80,9 +80,9 @@ public class PostService {
         return new PageImpl<>(items, pageable, postPage.getTotalElements());
     }
 
-    /** 公开详情：非 PUBLISHED 或已软删（@SQLRestriction）一律 404。 */
+    /** 公开详情：非 PUBLISHED 或已软删（查询层 AndDeletedFalse 过滤）一律 404。 */
     public PostResponse getPublished(UUID id, Instant now) {
-        Post post = postRepository.findById(id)
+        Post post = postRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new PostException(ErrorCode.POST_NOT_FOUND));
         if (post.getStatus() != PostStatus.PUBLISHED) {
             throw new PostException(ErrorCode.POST_NOT_FOUND);
@@ -94,7 +94,7 @@ public class PostService {
 
     /** 编辑：仅作者本人；补丁式更新非空字段。 */
     public PostResponse update(UUID id, UUID authorId, UpdatePostRequest request, Instant now) {
-        Post post = postRepository.findById(id)
+        Post post = postRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new PostException(ErrorCode.POST_NOT_FOUND));
         if (!post.getAuthorId().equals(authorId)) {
             throw new PostException(ErrorCode.NOT_POST_AUTHOR);
@@ -111,11 +111,11 @@ public class PostService {
                 MarkdownSummary.derive(saved.getContent()));
     }
 
-    /** 我的帖子：当前用户全部状态（含 DRAFT），软删已被 @SQLRestriction 排除。 */
+    /** 我的帖子：当前用户全部状态（含 DRAFT），软删已被查询层 AndDeletedFalse 排除。 */
     public Page<PostSummary> listMine(UUID authorId, int page, int size, Instant now) {
         int safeSize = clampSize(size);
         Pageable pageable = buildPageable(page, safeSize);
-        Page<Post> postPage = postRepository.findByAuthorId(authorId, pageable);
+        Page<Post> postPage = postRepository.findByAuthorIdAndDeletedFalse(authorId, pageable);
         AuthorView author = resolveAuthor(authorId);
         List<PostSummary> items = postPage.getContent().stream()
                 .map(p -> PostSummary.from(p, author.name(), author.avatarUrl(),

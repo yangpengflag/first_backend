@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 软删除语义（Task 7.1 ~ 7.3）。
  *
- * <p>行保留、写入 deletedAt、邮箱唯一约束不释放、终态不可自行恢复。
+ * <p>行保留、置 deleted 标志、邮箱唯一约束不释放、终态不可自行恢复。
  */
 @SpringBootTest
 @Import(TestClockConfiguration.class)
@@ -77,7 +77,7 @@ class AuthServiceDeletionTest {
 
         User deleted = userRepository.findByEmail(EMAIL).orElseThrow();
         assertThat(deleted.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(deleted.getDeletedAt()).isEqualTo(NOW.plus(Duration.ofHours(1)));
+        assertThat(deleted.isDeleted()).isTrue();
         assertThat(deleted.getId()).isEqualTo(user.getId());
         assertThat(deleted.getEmail()).isEqualTo(EMAIL);
         // 验证码随注销清除

@@ -11,7 +11,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -19,7 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 仓储层测试：验证 {@code @SQLRestriction} 软删过滤与 tags 集合持久化。
+ * 仓储层测试：验证 {@code AndDeletedFalse} 查询层软删过滤与 tags 集合持久化。
  *
  * <p>软删通过原生 UPDATE + 清空持久化上下文模拟，确保查询真正落库并应用过滤条件。
  */
@@ -38,14 +37,13 @@ class PostRepositoryTest {
         Post post = Post.create(UUID.randomUUID(), "T", "c", null, List.of(), PostStatus.PUBLISHED, Instant.now());
         Post saved = postRepository.saveAndFlush(post);
 
-        entityManager.createNativeQuery("UPDATE posts SET deleted_at = ?1 WHERE id = ?2")
-                .setParameter(1, Timestamp.from(Instant.now()))
-                .setParameter(2, saved.getId())
+        entityManager.createNativeQuery("UPDATE posts SET deleted = true WHERE id = ?1")
+                .setParameter(1, saved.getId())
                 .executeUpdate();
         entityManager.clear();
 
-        assertThat(postRepository.findById(saved.getId())).isEmpty();
-        assertThat(postRepository.findByStatus(PostStatus.PUBLISHED, PageRequest.of(0, 10)).getContent())
+        assertThat(postRepository.findByIdAndDeletedFalse(saved.getId())).isEmpty();
+        assertThat(postRepository.findByStatusAndDeletedFalse(PostStatus.PUBLISHED, PageRequest.of(0, 10)).getContent())
                 .noneMatch(p -> p.getId().equals(saved.getId()));
     }
 
@@ -56,7 +54,7 @@ class PostRepositoryTest {
         Post saved = postRepository.saveAndFlush(post);
         entityManager.clear();
 
-        Post reloaded = postRepository.findById(saved.getId()).orElseThrow();
+        Post reloaded = postRepository.findByIdAndDeletedFalse(saved.getId()).orElseThrow();
         assertThat(reloaded.getTags()).containsExactly("Hiking", "Sichuan");
     }
 }

@@ -71,7 +71,7 @@ class PostServiceTest {
     void listPublishedExcludesDraftsAndResolvesAuthor() {
         User alice = activeUser(AUTHOR, "Alice", null);
         Post published = Post.create(AUTHOR, "P", "content here", null, List.of(), PostStatus.PUBLISHED, NOW);
-        when(postRepository.findByStatus(eq(PostStatus.PUBLISHED), any()))
+        when(postRepository.findByStatusAndDeletedFalse(eq(PostStatus.PUBLISHED), any()))
                 .thenReturn(new PageImpl<>(List.of(published), PageRequest.of(0, 20), 1));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
 
@@ -83,7 +83,7 @@ class PostServiceTest {
 
     @Test
     void sizeClampedToFifty() {
-        when(postRepository.findByStatus(eq(PostStatus.PUBLISHED), any()))
+        when(postRepository.findByStatusAndDeletedFalse(eq(PostStatus.PUBLISHED), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 50), 0));
 
         Page<PostSummary> page = postService.listPublished(0, 200, NOW);
@@ -94,7 +94,7 @@ class PostServiceTest {
     @Test
     void getPublishedThrowsForDraft() {
         Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, NOW);
-        when(postRepository.findById(draft.getId())).thenReturn(Optional.of(draft));
+        when(postRepository.findByIdAndDeletedFalse(draft.getId())).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> postService.getPublished(draft.getId(), NOW))
                 .isInstanceOf(PostException.class);
@@ -103,7 +103,7 @@ class PostServiceTest {
     @Test
     void updateRejectsNonAuthor() {
         Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, NOW);
-        when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+        when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> postService.update(post.getId(), UUID.randomUUID(),
                 new UpdatePostRequest(null, null, null, null, PostStatus.PUBLISHED), NOW))
@@ -114,7 +114,7 @@ class PostServiceTest {
     void updatePublishesDraft() {
         User alice = activeUser(AUTHOR, "Alice", null);
         Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, NOW);
-        when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+        when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
         when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
 
@@ -128,7 +128,7 @@ class PostServiceTest {
     void listMineReturnsAllStatuses() {
         User alice = activeUser(AUTHOR, "Alice", null);
         Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, NOW);
-        when(postRepository.findByAuthorId(eq(AUTHOR), any()))
+        when(postRepository.findByAuthorIdAndDeletedFalse(eq(AUTHOR), any()))
                 .thenReturn(new PageImpl<>(List.of(draft), PageRequest.of(0, 20), 1));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
 

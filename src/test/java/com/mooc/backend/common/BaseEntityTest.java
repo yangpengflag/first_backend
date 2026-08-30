@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class BaseEntityTest {
 
@@ -32,7 +32,7 @@ class BaseEntityTest {
         assertEquals(id, d.getId());
         assertEquals(T0, d.getCreatedAt());
         assertEquals(T0, d.getUpdatedAt());
-        assertNull(d.getDeletedAt());
+        assertThat(d.isDeleted()).isFalse();
     }
 
     @Test

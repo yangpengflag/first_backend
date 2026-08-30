@@ -73,7 +73,7 @@ class AuthServiceRegistrationTest {
         assertThat(saved.getVerificationCode()).isNotBlank();
         assertThat(saved.getVerificationCodeExpiresAt()).isAfter(NOW);
         assertThat(saved.getFailedAttempts()).isZero();
-        assertThat(saved.getDeletedAt()).isNull();
+        assertThat(saved.isDeleted()).isFalse();
     }
 
     @Test

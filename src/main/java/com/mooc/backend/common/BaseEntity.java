@@ -16,11 +16,11 @@ import java.util.UUID;
  * {@link #touch(Instant)} 刷新更新时间——时间由调用方注入，便于测试，
  * 与 {@code User} 既有的显式时间注入约定一致。
  *
- * <p><b>软删除</b>：本基类携带 {@code deletedAt} 字段，但<b>不</b>在基类上施加
- * {@code @SQLRestriction}。原因：{@code User} 的鉴权逻辑（登录 / 令牌校验）必须能查到
- * 已软删的行以返回精确的 {@code ACCOUNT_DELETED} 响应，基类全局过滤会破坏该语义。
- * 需要自动过滤已删行的实体应在<b>自身类</b>上声明
- * {@code @SQLRestriction("deleted_at IS NULL")}（见后续业务模块）。
+ * <p><b>软删除</b>：本基类携带 {@code deleted} 布尔标志（默认 false），但<b>不</b>在基类上施加
+ * 任何全局过滤。原因：{@code User} 的鉴权逻辑（登录 / 令牌校验）必须能查到
+ * 已软删的行以返回精确的 {@code ACCOUNT_DELETED} 响应，全局过滤会破坏该语义。
+ * 需要自动排除已删行的实体，应在<b>仓储层</b>使用 {@code findByXxxAndDeletedFalse} 显式过滤
+ * （见 {@code PostRepository}），而非 {@code @SQLRestriction}，以贴合 {@code database-conventions} 约定。
  */
 @MappedSuperclass
 public abstract class BaseEntity {
@@ -35,8 +35,8 @@ public abstract class BaseEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "deleted_at")
-    protected Instant deletedAt;
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
 
     protected BaseEntity() {
         // JPA only
@@ -65,8 +65,13 @@ public abstract class BaseEntity {
         return updatedAt;
     }
 
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    /** 软删除：置 {@code deleted} 标志，行保留。子类（如 {@code User.softDelete}）负责维护审计时间戳。 */
+    public void markDeleted() {
+        this.deleted = true;
     }
 
     @Override

@@ -12,8 +12,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.SQLRestriction;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,15 +20,14 @@ import java.util.UUID;
 /**
  * 旅行攻略（Story）实体。
  *
- * <p>继承 {@code BaseEntity} 共享主键与审计时间戳。<b>普通业务实体</b>，故在类上声明
- * {@code @SQLRestriction("deleted_at IS NULL")}——与 {@code User} 故意省略该注解相反，
- * 因为攻略查询无需命中已软删行（见 BaseEntity 注释「后续业务模块在自身类声明」）。
+ * <p>继承 {@code BaseEntity} 共享主键与审计时间戳。软删除通过<b>仓储层</b>
+ * {@code findByXxxAndDeletedFalse} 显式过滤实现（不使用 {@code @SQLRestriction} 全局过滤），
+ * 以贴合 {@code database-conventions} 约定；{@code User} 因鉴权需查已删行，同样不加全局过滤。
  *
  * <p>{@code summary} 不存储，读取时由 {@code MarkdownSummary} 从 {@code content} 派生。
  */
 @Entity
 @Table(name = "posts")
-@SQLRestriction("deleted_at IS NULL")
 public class Post extends BaseEntity {
 
     @Column(name = "author_id", nullable = false)

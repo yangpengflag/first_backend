@@ -37,7 +37,7 @@ class UserTest {
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.EMAIL_UNVERIFIED);
         assertThat(user.getFailedAttempts()).isZero();
-        assertThat(user.getDeletedAt()).isNull();
+        assertThat(user.isDeleted()).isFalse();
         assertThat(user.getLockedUntil()).isNull();
         assertThat(user.getVerificationCode()).isNull();
         assertThat(user.getId()).isNotNull();
@@ -181,7 +181,7 @@ class UserTest {
         user.softDelete(NOW.plus(Duration.ofHours(1)));
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(user.getDeletedAt()).isEqualTo(NOW.plus(Duration.ofHours(1)));
+        assertThat(user.isDeleted()).isTrue();
         assertThat(user.getId()).isNotNull();
         assertThat(user.getEmail()).isEqualTo("alice@example.com");
         // 验证码随注销一并清除

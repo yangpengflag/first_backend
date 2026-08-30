@@ -7,19 +7,24 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * 帖子仓储。
  *
- * <p>{@code @SQLRestriction} 已声明于 {@link Post} 实体，故所有查询（含 {@code findById}）
- * 自动排除软删除行——已软删的攻略不会出现在列表 / 详情 / 我的帖子中。
+ * <p>软删除通过<b>查询层显式过滤</b>实现：所有对外查询方法均带 {@code AndDeletedFalse} 后缀，
+ * 确保已软删的攻略不会出现在列表 / 详情 / 我的帖子中。这与 {@code database-conventions} 约定一致，
+ * 也避免了对 {@code User}（需查已删行）施加全局过滤的副作用。
  */
 public interface PostRepository extends JpaRepository<Post, UUID> {
 
-    /** 按状态分页查询（配合 @SQLRestriction 自动排除软删）。 */
-    Page<Post> findByStatus(PostStatus status, Pageable pageable);
+    /** 按状态分页查询，显式排除软删行。 */
+    Page<Post> findByStatusAndDeletedFalse(PostStatus status, Pageable pageable);
 
-    /** 某作者的全部帖子（含 DRAFT 与 PUBLISHED；软删已被 @SQLRestriction 排除）。 */
-    Page<Post> findByAuthorId(UUID authorId, Pageable pageable);
+    /** 某作者的全部帖子（含 DRAFT 与 PUBLISHED），显式排除软删行。 */
+    Page<Post> findByAuthorIdAndDeletedFalse(UUID authorId, Pageable pageable);
+
+    /** 按 id 查询，显式排除软删行（保住"软删行 404"语义）。 */
+    Optional<Post> findByIdAndDeletedFalse(UUID id);
 }
