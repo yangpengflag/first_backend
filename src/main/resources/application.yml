@@ -3,22 +3,16 @@ spring:
     name: backend
 
   datasource:
-    # 文件模式：重启后数据仍在。注意 H2 文件库不支持多进程并发，
-    # 后端已启动时跑集成测试会因数据库被占用而失败——先停后端即可。
-    url: jdbc:h2:file:./data/wanderchina;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
+    url: jdbc:mysql://localhost:3306/wanderchina?connectionTimeZone=UTC&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: "123456"
 
   jpa:
     hibernate:
       ddl-auto: update
     open-in-view: false
     show-sql: false
-
-  h2:
-    console:
-      enabled: false
 
 server:
   port: 8080

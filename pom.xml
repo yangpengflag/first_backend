@@ -17,6 +17,8 @@
 		<java.version>17</java.version>
 		<!-- 源码为 UTF-8（含中文注释与文本块），Windows 上 maven 默认用平台编码(GBK)读取会破坏文本块，必须显式声明 -->
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<!-- Windows 上 javac 默认用平台编码(GBK)读源文件，需显式指定 UTF-8，否则中文注释 / 文本块编译报错 -->
+		<maven.compiler.encoding>UTF-8</maven.compiler.encoding>
 		<jjwt.version>0.12.6</jjwt.version>
 		<!-- 与 Spring Boot 3.5 兼容的 springdoc 版本（本地仓库已缓存，可离线构建） -->
 		<springdoc.version>2.8.8</springdoc.version>
@@ -39,8 +41,8 @@
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
+			<groupId>com.mysql</groupId>
+			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
