@@ -1,7 +1,10 @@
 package com.mooc.backend.auth.exception;
 
 import com.mooc.backend.auth.api.ErrorResponse;
+import com.mooc.backend.bookmarks.exception.BookmarkException;
+import com.mooc.backend.comments.exception.CommentException;
 import com.mooc.backend.posts.exception.PostException;
+import com.mooc.backend.votes.exception.VoteException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -35,6 +38,24 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PostException.class)
     public ResponseEntity<ErrorResponse> handlePostException(PostException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
+    }
+
+    @ExceptionHandler(CommentException.class)
+    public ResponseEntity<ErrorResponse> handleCommentException(CommentException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
+    }
+
+    @ExceptionHandler(VoteException.class)
+    public ResponseEntity<ErrorResponse> handleVoteException(VoteException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
+    }
+
+    @ExceptionHandler(BookmarkException.class)
+    public ResponseEntity<ErrorResponse> handleBookmarkException(BookmarkException ex) {
         return ResponseEntity.status(ex.getStatus())
                 .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
     }

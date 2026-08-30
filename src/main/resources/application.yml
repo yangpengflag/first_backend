@@ -54,6 +54,8 @@ auth:
     forgot-password-per-ip-per-hour: 10
     forgot-password-per-ip-email-per-24h: 3
     reset-password-per-ip-per-hour: 10
+    # 投票：单用户每分钟（防刷票）。
+    vote-per-user-per-minute: 10
 
 # OpenAPI 文档产出（change: openapi-integration）
 springdoc:

@@ -52,6 +52,15 @@ public enum ErrorCode {
     /** 当前用户不是该帖子的作者，无权编辑。 */
     NOT_POST_AUTHOR(HttpStatus.FORBIDDEN, "You are not the author of this post."),
 
+    /** 评论不存在或已软删。 */
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found."),
+
+    /** 当前用户不是该评论的作者，无权删除。 */
+    NOT_COMMENT_AUTHOR(HttpStatus.FORBIDDEN, "You are not the author of this comment."),
+
+    /** 回复的父评论不存在、跨帖，或父评论本身已是回复（不允许嵌套）。 */
+    INVALID_PARENT_COMMENT(HttpStatus.BAD_REQUEST, "Invalid parent comment."),
+
     /** 未预期的服务端错误。 */
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.");
 

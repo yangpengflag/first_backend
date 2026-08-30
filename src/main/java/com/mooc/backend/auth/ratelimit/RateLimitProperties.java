@@ -30,6 +30,9 @@ public class RateLimitProperties {
     /** 提交新密码：单 IP 每小时（防重置码爆破）。 */
     private int resetPasswordPerIpPerHour = 10;
 
+    /** 投票：单用户每分钟（防刷票）。 */
+    private int votePerUserPerMinute = 10;
+
     public int getLoginPerIpPer15m() {
         return loginPerIpPer15m;
     }
@@ -92,5 +95,13 @@ public class RateLimitProperties {
 
     public void setResetPasswordPerIpPerHour(int resetPasswordPerIpPerHour) {
         this.resetPasswordPerIpPerHour = resetPasswordPerIpPerHour;
+    }
+
+    public int getVotePerUserPerMinute() {
+        return votePerUserPerMinute;
+    }
+
+    public void setVotePerUserPerMinute(int votePerUserPerMinute) {
+        this.votePerUserPerMinute = votePerUserPerMinute;
     }
 }
