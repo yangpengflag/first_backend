@@ -17,7 +17,7 @@ import java.util.UUID;
  * 确保已软删的攻略不会出现在列表 / 详情 / 我的帖子中。这与 {@code database-conventions} 约定一致，
  * 也避免了对 {@code User}（需查已删行）施加全局过滤的副作用。
  */
-public interface PostRepository extends JpaRepository<Post, UUID> {
+public interface PostRepository extends JpaRepository<Post, UUID>, PostRepositoryCustom {
 
     /** 按状态分页查询，显式排除软删行。 */
     Page<Post> findByStatusAndDeletedFalse(PostStatus status, Pageable pageable);
@@ -27,4 +27,10 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
 
     /** 按 id 查询，显式排除软删行（保住"软删行 404"语义）。 */
     Optional<Post> findByIdAndDeletedFalse(UUID id);
+
+    /** PUBLISHED 且未软删的帖子总数（offset 分页 total 用，与排序无关）。 */
+    long countByStatusAndDeletedFalse(PostStatus status);
+
+    /** 某作者未软删的帖子总数（offset 分页 total 用）。 */
+    long countByAuthorIdAndDeletedFalse(UUID authorId);
 }

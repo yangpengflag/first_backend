@@ -5,7 +5,9 @@ import com.mooc.backend.auth.domain.UserRepository;
 import com.mooc.backend.auth.domain.UserStatus;
 import com.mooc.backend.posts.MarkdownSummary;
 import com.mooc.backend.posts.api.CreatePostRequest;
+import com.mooc.backend.posts.api.PostListResponse;
 import com.mooc.backend.posts.api.PostResponse;
+import com.mooc.backend.posts.api.PostStatsView;
 import com.mooc.backend.posts.api.PostSummary;
 import com.mooc.backend.posts.api.UpdatePostRequest;
 import com.mooc.backend.posts.domain.Post;
@@ -13,17 +15,14 @@ import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.posts.exception.PostException;
 import com.mooc.backend.auth.exception.ErrorCode;
 import com.mooc.backend.posts.repository.PostRepository;
+import com.mooc.backend.posts.repository.PostSort;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -37,13 +36,19 @@ import java.util.stream.Collectors;
  *
  * <p>依赖 {@code UserRepository} 仅用于只读解析作者展示信息（displayName / avatarUrl），
  * 通过批量 IN 查询避免 N+1；不持有 User 实体的写权限。
+ *
+ * <p>列表读取（公开 / 我的）通过 {@code PostRepository} 的聚合查询实时取得互动统计，
+ * 由 {@code PostListResponse} 统一信封返回（cursor 模式用于 latest 排序，offset 模式用于 top / most_commented）。
  */
 @Service
 public class PostService {
 
     private static final Logger log = LoggerFactory.getLogger(PostService.class);
     private static final int DEFAULT_PAGE_SIZE = 20;
-    private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_PAGE_SIZE = 100;
+
+    private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
+    private static final Base64.Decoder B64D = Base64.getUrlDecoder();
 
     private final PostRepository postRepository;
     private final UserRepository userRepository;
@@ -65,19 +70,29 @@ public class PostService {
                 MarkdownSummary.derive(saved.getContent()));
     }
 
-    /** 公开列表：仅 PUBLISHED，按 created_at 倒序，size 钳制上限；作者信息批量解析。 */
-    public Page<PostSummary> listPublished(int page, int size, Instant now) {
+    /** 公开列表：仅 PUBLISHED，支持 latest（cursor）/ top / most_commented（offset）排序与混合分页。 */
+    public PostListResponse listPublished(String sortParam, String cursor, Integer page, Integer size, Instant now) {
         int safeSize = clampSize(size);
-        Pageable pageable = buildPageable(page, safeSize);
-        Page<Post> postPage = postRepository.findByStatusAndDeletedFalse(PostStatus.PUBLISHED, pageable);
-        Map<UUID, AuthorView> authors = resolveAuthors(
-                postPage.getContent().stream().map(Post::getAuthorId).distinct().toList());
-        List<PostSummary> items = postPage.getContent().stream()
-                .map(p -> PostSummary.from(p, authors.getOrDefault(p.getAuthorId(), AuthorView.UNKNOWN).name(),
-                        authors.getOrDefault(p.getAuthorId(), AuthorView.UNKNOWN).avatarUrl(),
-                        MarkdownSummary.derive(p.getContent())))
-                .toList();
-        return new PageImpl<>(items, pageable, postPage.getTotalElements());
+        PostSort sort = PostSort.from(sortParam);
+
+        if (sort == PostSort.LATEST && cursor != null) {
+            Cursor c = decodeCursor(cursor);
+            List<PostStatsView> stats = postRepository.findPublishedStats(sort, safeSize + 1, 0, c.ts(), c.id(), true);
+            boolean hasMore = stats.size() > safeSize;
+            List<PostStatsView> pageStats = hasMore ? stats.subList(0, safeSize) : stats;
+            Map<UUID, Post> byId = fetchPosts(pageStats);
+            List<PostSummary> items = toSummaries(pageStats, byId);
+            String next = hasMore ? encodeCursor(pageStats.get(pageStats.size() - 1), byId) : null;
+            return PostListResponse.cursor(items, next, hasMore);
+        }
+
+        int safePage = (page == null || page < 1) ? 1 : page;
+        int offset = (safePage - 1) * safeSize;
+        List<PostStatsView> stats = postRepository.findPublishedStats(sort, safeSize, offset, null, null, false);
+        long total = postRepository.countByStatusAndDeletedFalse(PostStatus.PUBLISHED);
+        Map<UUID, Post> byId = fetchPosts(stats);
+        List<PostSummary> items = toSummaries(stats, byId);
+        return PostListResponse.offset(items, safePage, safeSize, total);
     }
 
     /** 公开详情：非 PUBLISHED 或已软删（查询层 AndDeletedFalse 过滤）一律 404。 */
@@ -122,31 +137,82 @@ public class PostService {
         postRepository.save(post);
     }
 
-    /** 我的帖子：当前用户全部状态（含 DRAFT），软删已被查询层 AndDeletedFalse 排除。 */
-    public Page<PostSummary> listMine(UUID authorId, int page, int size, Instant now) {
+    /** 我的帖子：当前用户全部状态（含 DRAFT），软删已被查询层 AndDeletedFalse 排除；同步带互动统计。 */
+    public PostListResponse listMine(UUID authorId, String sortParam, String cursor, Integer page, Integer size, Instant now) {
         int safeSize = clampSize(size);
-        Pageable pageable = buildPageable(page, safeSize);
-        Page<Post> postPage = postRepository.findByAuthorIdAndDeletedFalse(authorId, pageable);
-        AuthorView author = resolveAuthor(authorId);
-        List<PostSummary> items = postPage.getContent().stream()
-                .map(p -> PostSummary.from(p, author.name(), author.avatarUrl(),
-                        MarkdownSummary.derive(p.getContent())))
-                .toList();
-        return new PageImpl<>(items, pageable, postPage.getTotalElements());
+        PostSort sort = PostSort.from(sortParam);
+
+        if (sort == PostSort.LATEST && cursor != null) {
+            Cursor c = decodeCursor(cursor);
+            List<PostStatsView> stats = postRepository.findMyStats(authorId, sort, safeSize + 1, 0, c.ts(), c.id(), true);
+            boolean hasMore = stats.size() > safeSize;
+            List<PostStatsView> pageStats = hasMore ? stats.subList(0, safeSize) : stats;
+            Map<UUID, Post> byId = fetchPosts(pageStats);
+            List<PostSummary> items = toSummaries(pageStats, byId);
+            String next = hasMore ? encodeCursor(pageStats.get(pageStats.size() - 1), byId) : null;
+            return PostListResponse.cursor(items, next, hasMore);
+        }
+
+        int safePage = (page == null || page < 1) ? 1 : page;
+        int offset = (safePage - 1) * safeSize;
+        List<PostStatsView> stats = postRepository.findMyStats(authorId, sort, safeSize, offset, null, null, false);
+        long total = postRepository.countByAuthorIdAndDeletedFalse(authorId);
+        Map<UUID, Post> byId = fetchPosts(stats);
+        List<PostSummary> items = toSummaries(stats, byId);
+        return PostListResponse.offset(items, safePage, safeSize, total);
     }
 
     // ---------- 内部辅助 ----------
 
-    private int clampSize(int size) {
-        if (size <= 0) {
+    private int clampSize(Integer size) {
+        if (size == null || size <= 0) {
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(size, MAX_PAGE_SIZE);
     }
 
-    private Pageable buildPageable(int page, int size) {
-        int safePage = Math.max(page, 0);
-        return PageRequest.of(safePage, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+    private Map<UUID, Post> fetchPosts(List<PostStatsView> stats) {
+        if (stats.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> ids = stats.stream().map(PostStatsView::postId).toList();
+        return postRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Post::getId, p -> p, (a, b) -> a));
+    }
+
+    private List<PostSummary> toSummaries(List<PostStatsView> stats, Map<UUID, Post> byId) {
+        return stats.stream()
+                .map(s -> {
+                    Post p = byId.get(s.postId());
+                    if (p == null) {
+                        return null;
+                    }
+                    AuthorView a = resolveAuthor(p.getAuthorId());
+                    return PostSummary.from(p, a.name(), a.avatarUrl(), MarkdownSummary.derive(p.getContent()),
+                            s.commentCount(), s.upVoteCount(), s.bookmarkCount());
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private String encodeCursor(PostStatsView last, Map<UUID, Post> byId) {
+        Post p = byId.get(last.postId());
+        if (p == null) {
+            return null;
+        }
+        return encodeCursor(p.getCreatedAt(), p.getId());
+    }
+
+    private String encodeCursor(Instant ts, UUID id) {
+        return B64.encodeToString((ts.toString() + "|" + id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private Cursor decodeCursor(String token) {
+        String s = new String(B64D.decode(token), java.nio.charset.StandardCharsets.UTF_8);
+        int idx = s.indexOf('|');
+        Instant ts = Instant.parse(s.substring(0, idx));
+        UUID id = UUID.fromString(s.substring(idx + 1));
+        return new Cursor(ts, id);
     }
 
     /** tag 归一化：trim + 小写 + 去空 + 去重 + 上限 10（与入参校验双保险）。 */
@@ -185,6 +251,10 @@ public class PostService {
             }
         }
         return result;
+    }
+
+    /** 游标：编码为 base64(createdAtISO + "|" + id)，按 (created_at, id) 截断，无服务端状态。 */
+    private record Cursor(Instant ts, UUID id) {
     }
 
     /** 作者展示信息视图；占位用于作者缺失 / 已注销。 */

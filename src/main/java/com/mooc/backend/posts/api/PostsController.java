@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-import org.springframework.data.domain.Page;
+import com.mooc.backend.posts.api.PostListResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -55,21 +55,25 @@ public class PostsController {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
-    @Operation(summary = "公开列表", description = "仅返回 PUBLISHED，按创建时间倒序分页；每项含作者展示信息。")
+    @Operation(summary = "公开列表", description = "仅返回 PUBLISHED；支持 sort=latest（cursor 翻页）/ top / most_commented（offset 翻页），每项含作者展示信息与互动统计。")
     @GetMapping
-    public ResponseEntity<Page<PostSummary>> list(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(postService.listPublished(page, size, Instant.now()));
+    public ResponseEntity<PostListResponse> list(
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false, defaultValue = "1") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
+        return ResponseEntity.ok(postService.listPublished(sort, cursor, page, size, Instant.now()));
     }
 
-    @Operation(summary = "我的帖子", description = "需鉴权，返回当前用户全部状态（含 DRAFT）的帖子。")
+    @Operation(summary = "我的帖子", description = "需鉴权，返回当前用户全部状态（含 DRAFT）的帖子，并带互动统计与排序 / 分页。")
     @GetMapping("/me")
-    public ResponseEntity<Page<PostSummary>> listMine(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<PostListResponse> listMine(
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false, defaultValue = "1") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
         UUID authorId = currentUserId();
-        return ResponseEntity.ok(postService.listMine(authorId, page, size, Instant.now()));
+        return ResponseEntity.ok(postService.listMine(authorId, sort, cursor, page, size, Instant.now()));
     }
 
     @Operation(summary = "帖子详情", description = "仅返回 PUBLISHED；草稿 / 已软删返回 404。")

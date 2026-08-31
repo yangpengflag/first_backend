@@ -95,10 +95,10 @@ class PostsControllerIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         UUID postId = extractId(body);
 
-        // 草稿不进公开列表
-        mockMvc.perform(get("/api/posts"))
+        // 草稿不进公开列表（offset 模式用 sort=top 以拿到 total）
+        mockMvc.perform(get("/api/posts?sort=top"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.total").value(0));
 
         // 草稿详情 404
         mockMvc.perform(get("/api/posts/" + postId)).andExpect(status().isNotFound());
@@ -112,11 +112,11 @@ class PostsControllerIntegrationTest {
                 .andExpect(jsonPath("$.summary").value(startsWith("Top This is great")));
 
         // 发布后进入公开列表
-        mockMvc.perform(get("/api/posts"))
+        mockMvc.perform(get("/api/posts?sort=top"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].author_name").value("Alice"))
-                .andExpect(jsonPath("$.content[0].author_id").value(authorA.toString()));
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].author_name").value("Alice"))
+                .andExpect(jsonPath("$.items[0].author_id").value(authorA.toString()));
 
         // 公开详情：派生 summary，且不含 deleted_at / email
         mockMvc.perform(get("/api/posts/" + postId))
@@ -126,10 +126,10 @@ class PostsControllerIntegrationTest {
     }
 
     @Test
-    void sizeClampedToFifty() throws Exception {
-        mockMvc.perform(get("/api/posts").param("size", "200"))
+    void sizeClampedToHundred() throws Exception {
+        mockMvc.perform(get("/api/posts?sort=top").param("size", "200"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.size").value(50));
+                .andExpect(jsonPath("$.size").value(100));
     }
 
     @Test
@@ -144,7 +144,7 @@ class PostsControllerIntegrationTest {
 
         mockMvc.perform(get("/api/posts/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].title").value("Mine"));
+                .andExpect(jsonPath("$.items[0].title").value("Mine"));
     }
 
     @Test

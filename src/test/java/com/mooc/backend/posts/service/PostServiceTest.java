@@ -4,22 +4,22 @@ import com.mooc.backend.auth.domain.User;
 import com.mooc.backend.auth.domain.UserRepository;
 import com.mooc.backend.auth.domain.UserStatus;
 import com.mooc.backend.posts.api.CreatePostRequest;
+import com.mooc.backend.posts.api.PostListResponse;
 import com.mooc.backend.posts.api.PostResponse;
+import com.mooc.backend.posts.api.PostStatsView;
 import com.mooc.backend.posts.api.PostSummary;
 import com.mooc.backend.posts.api.UpdatePostRequest;
 import com.mooc.backend.posts.domain.Post;
 import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.posts.exception.PostException;
 import com.mooc.backend.posts.repository.PostRepository;
+import com.mooc.backend.posts.repository.PostSort;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +29,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -68,27 +70,36 @@ class PostServiceTest {
     }
 
     @Test
-    void listPublishedExcludesDraftsAndResolvesAuthor() {
+    void listPublishedExcludesDraftsAndResolvesAuthorWithStats() {
         User alice = activeUser(AUTHOR, "Alice", null);
+        UUID postId = UUID.randomUUID();
         Post published = Post.create(AUTHOR, "P", "content here", null, List.of(), PostStatus.PUBLISHED, NOW);
-        when(postRepository.findByStatusAndDeletedFalse(eq(PostStatus.PUBLISHED), any()))
-                .thenReturn(new PageImpl<>(List.of(published), PageRequest.of(0, 20), 1));
+        setId(published, postId);
+        PostStatsView stat = new PostStatsView(postId, 3L, 6L, 2L);
+        when(postRepository.findPublishedStats(any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
+                .thenReturn(List.of(stat));
+        when(postRepository.findAllById(anyList())).thenReturn(List.of(published));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
+        when(postRepository.countByStatusAndDeletedFalse(any())).thenReturn(1L);
 
-        Page<PostSummary> page = postService.listPublished(0, 20, NOW);
+        PostListResponse resp = postService.listPublished(null, null, 1, 20, NOW);
 
-        assertThat(page.getContent()).hasSize(1);
-        assertThat(page.getContent().get(0).getAuthorName()).isEqualTo("Alice");
+        assertThat(resp.getItems()).hasSize(1);
+        PostSummary item = resp.getItems().get(0);
+        assertThat(item.getAuthorName()).isEqualTo("Alice");
+        assertThat(item.getCommentCount()).isEqualTo(3);
+        assertThat(item.getUpVoteCount()).isEqualTo(6);
+        assertThat(item.getBookmarkCount()).isEqualTo(2);
     }
 
     @Test
-    void sizeClampedToFifty() {
-        when(postRepository.findByStatusAndDeletedFalse(eq(PostStatus.PUBLISHED), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 50), 0));
+    void sizeClampedToHundred() {
+        when(postRepository.findPublishedStats(any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
+                .thenReturn(List.of());
 
-        Page<PostSummary> page = postService.listPublished(0, 200, NOW);
+        PostListResponse resp = postService.listPublished("top", null, 1, 200, NOW);
 
-        assertThat(page.getPageable().getPageSize()).isEqualTo(50);
+        assertThat(resp.getSize()).isEqualTo(100);
     }
 
     @Test
@@ -145,16 +156,22 @@ class PostServiceTest {
     }
 
     @Test
-    void listMineReturnsAllStatuses() {
+    void listMineReturnsAllStatusesWithStats() {
         User alice = activeUser(AUTHOR, "Alice", null);
+        UUID postId = UUID.randomUUID();
         Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, NOW);
-        when(postRepository.findByAuthorIdAndDeletedFalse(eq(AUTHOR), any()))
-                .thenReturn(new PageImpl<>(List.of(draft), PageRequest.of(0, 20), 1));
+        setId(draft, postId);
+        PostStatsView stat = new PostStatsView(postId, 0L, 0L, 0L);
+        when(postRepository.findMyStats(any(), any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
+                .thenReturn(List.of(stat));
+        when(postRepository.findAllById(anyList())).thenReturn(List.of(draft));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
+        when(postRepository.countByAuthorIdAndDeletedFalse(any())).thenReturn(1L);
 
-        Page<PostSummary> page = postService.listMine(AUTHOR, 0, 20, NOW);
+        PostListResponse resp = postService.listMine(AUTHOR, null, null, 1, 20, NOW);
 
-        assertThat(page.getContent()).hasSize(1);
+        assertThat(resp.getItems()).hasSize(1);
+        assertThat(resp.getItems().get(0).getAuthorName()).isEqualTo("Alice");
     }
 
     private User activeUser(UUID id, String name, String avatar) {
@@ -164,5 +181,16 @@ class PostServiceTest {
         when(user.getAvatarUrl()).thenReturn(avatar);
         when(user.getStatus()).thenReturn(UserStatus.ACTIVE);
         return user;
+    }
+
+    /** Post 未暴露 setId，测试用反射设定 id 以匹配聚合视图的 postId。 */
+    private void setId(Post post, UUID id) {
+        try {
+            var field = post.getClass().getSuperclass().getDeclaredField("id");
+            field.setAccessible(true);
+            field.set(post, id);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

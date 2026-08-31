@@ -13,6 +13,9 @@ import java.util.UUID;
 /**
  * 帖子列表项出网白名单 DTO（不含 {@code content} / {@code updated_at}，列表无需）。
  * snake_case 字段，继承 {@code BaseResponse} 自带 request_id。
+ *
+ * <p>互动统计字段（comment_count / up_vote_count / bookmark_count）由列表聚合查询实时填充，
+ * 不在 {@code Post} 实体冗余存储；详情等其它端点复用 {@link #from(Post, String, String, String)} 时计数为 0。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public class PostSummary extends BaseResponse {
@@ -27,10 +30,13 @@ public class PostSummary extends BaseResponse {
     @JsonProperty("author_avatar_url") private final String authorAvatarUrl;
     @JsonProperty("summary") private final String summary;
     @JsonProperty("created_at") private final Instant createdAt;
+    @JsonProperty("comment_count") private final long commentCount;
+    @JsonProperty("up_vote_count") private final long upVoteCount;
+    @JsonProperty("bookmark_count") private final long bookmarkCount;
 
     public PostSummary(UUID id, String title, String coverImageUrl, List<String> tags, String status,
                        UUID authorId, String authorName, String authorAvatarUrl, String summary,
-                       Instant createdAt) {
+                       Instant createdAt, long commentCount, long upVoteCount, long bookmarkCount) {
         super();
         this.id = id;
         this.title = title;
@@ -42,13 +48,19 @@ public class PostSummary extends BaseResponse {
         this.authorAvatarUrl = authorAvatarUrl;
         this.summary = summary;
         this.createdAt = createdAt;
+        this.commentCount = commentCount;
+        this.upVoteCount = upVoteCount;
+        this.bookmarkCount = bookmarkCount;
     }
 
     public static final Set<String> WHITELISTED_FIELDS = Set.of(
             "id", "title", "cover_image_url", "tags", "status",
-            "author_id", "author_name", "author_avatar_url", "summary", "created_at", "request_id");
+            "author_id", "author_name", "author_avatar_url", "summary", "created_at",
+            "comment_count", "up_vote_count", "bookmark_count", "request_id");
 
-    public static PostSummary from(Post post, String authorName, String authorAvatarUrl, String summary) {
+    /** 列表专用：携带三项实时计数。 */
+    public static PostSummary from(Post post, String authorName, String authorAvatarUrl, String summary,
+                                   long commentCount, long upVoteCount, long bookmarkCount) {
         return new PostSummary(
                 post.getId(),
                 post.getTitle(),
@@ -59,7 +71,15 @@ public class PostSummary extends BaseResponse {
                 authorName,
                 authorAvatarUrl,
                 summary,
-                post.getCreatedAt());
+                post.getCreatedAt(),
+                commentCount,
+                upVoteCount,
+                bookmarkCount);
+    }
+
+    /** 详情 / 创建 / 编辑等端点复用：计数为 0（互动数不在此处提供）。 */
+    public static PostSummary from(Post post, String authorName, String authorAvatarUrl, String summary) {
+        return from(post, authorName, authorAvatarUrl, summary, 0L, 0L, 0L);
     }
 
     public UUID getId() { return id; }
@@ -72,4 +92,7 @@ public class PostSummary extends BaseResponse {
     public String getAuthorAvatarUrl() { return authorAvatarUrl; }
     public String getSummary() { return summary; }
     public Instant getCreatedAt() { return createdAt; }
+    public long getCommentCount() { return commentCount; }
+    public long getUpVoteCount() { return upVoteCount; }
+    public long getBookmarkCount() { return bookmarkCount; }
 }
