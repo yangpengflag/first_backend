@@ -55,7 +55,8 @@ public class PostListResponse extends BaseResponse {
 
     /** offset 模式（sort=top / most_commented）：额外 page / size / total。 */
     public static PostListResponse offset(List<PostSummary> items, int page, int size, long total) {
-        return new PostListResponse(items, null, false, page, size, total);
+        boolean hasMore = (long) page * size < total;
+        return new PostListResponse(items, null, hasMore, page, size, total);
     }
 
     public List<PostSummary> getItems() {

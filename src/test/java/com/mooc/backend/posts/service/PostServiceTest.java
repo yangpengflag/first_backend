@@ -174,6 +174,47 @@ class PostServiceTest {
         assertThat(resp.getItems().get(0).getAuthorName()).isEqualTo("Alice");
     }
 
+    @Test
+    void listPublishedOffsetReportsHasMoreAndNullCursor() {
+        Post published = Post.create(AUTHOR, "P", "c", null, List.of(), PostStatus.PUBLISHED, NOW);
+        UUID postId = UUID.randomUUID();
+        setId(published, postId);
+        PostStatsView stat = new PostStatsView(postId, 1L, 1L, 1L);
+        when(postRepository.findPublishedStats(any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
+                .thenReturn(List.of(stat));
+        when(postRepository.findAllById(anyList())).thenReturn(List.of(published));
+        when(postRepository.countByStatusAndDeletedFalse(any())).thenReturn(25L);
+
+        PostListResponse first = postService.listPublished("top", null, 1, 20, NOW);
+        assertThat(first.isHasMore()).isTrue();
+        assertThat(first.getNextCursor()).isNull();
+        assertThat(first.getPage()).isEqualTo(1);
+        assertThat(first.getTotal()).isEqualTo(25);
+
+        PostListResponse last = postService.listPublished("top", null, 2, 20, NOW);
+        assertThat(last.isHasMore()).isFalse();
+        assertThat(last.getNextCursor()).isNull();
+    }
+
+    @Test
+    void listMineOffsetReportsHasMore() {
+        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, NOW);
+        UUID postId = UUID.randomUUID();
+        setId(draft, postId);
+        PostStatsView stat = new PostStatsView(postId, 1L, 1L, 1L);
+        when(postRepository.findMyStats(any(), any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
+                .thenReturn(List.of(stat));
+        when(postRepository.findAllById(anyList())).thenReturn(List.of(draft));
+        when(postRepository.countByAuthorIdAndDeletedFalse(any())).thenReturn(25L);
+
+        PostListResponse first = postService.listMine(AUTHOR, "most_commented", null, 1, 20, NOW);
+        assertThat(first.isHasMore()).isTrue();
+        assertThat(first.getNextCursor()).isNull();
+
+        PostListResponse last = postService.listMine(AUTHOR, "most_commented", null, 2, 20, NOW);
+        assertThat(last.isHasMore()).isFalse();
+    }
+
     private User activeUser(UUID id, String name, String avatar) {
         User user = mock(User.class);
         when(user.getId()).thenReturn(id);
