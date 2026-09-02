@@ -35,7 +35,7 @@ public abstract class BaseEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "deleted", nullable = false)
+    @Column(name = "deleted", nullable = false, columnDefinition = "tinyint(1)")
     private boolean deleted = false;
 
     protected BaseEntity() {

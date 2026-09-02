@@ -3,6 +3,7 @@ package com.mooc.backend.auth.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ import java.util.List;
  * <p>内存中的发送记录供测试断言投递行为，不落盘、不进日志。
  */
 @Component
+@ConditionalOnProperty(name = "spring.mail.host", havingValue = "false", matchIfMissing = true)
 public class LoggingMailSender implements MailSender {
 
     private static final String VERIFY_PATH = "/auth/verify?code=";

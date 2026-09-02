@@ -93,6 +93,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/posts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/posts/*").permitAll()
+                        // 城市 / 景点公开读端点（列表 / 详情）免鉴权（change: api-spots）
+                        .requestMatchers(HttpMethod.GET, "/api/cities").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/cities/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/spots").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/spots/*").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Spring Security 默认对未认证请求返回 403；本项目要求 401

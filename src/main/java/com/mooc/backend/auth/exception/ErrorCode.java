@@ -49,6 +49,12 @@ public enum ErrorCode {
     /** 帖子不存在、已被软删，或非公开（DRAFT）状态。 */
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "Post not found."),
 
+    /** 城市不存在（slug 未命中）。 */
+    CITY_NOT_FOUND(HttpStatus.NOT_FOUND, "City not found."),
+
+    /** 景点不存在（slug 未命中）。 */
+    SPOT_NOT_FOUND(HttpStatus.NOT_FOUND, "Spot not found."),
+
     /** 当前用户不是该帖子的作者，无权编辑。 */
     NOT_POST_AUTHOR(HttpStatus.FORBIDDEN, "You are not the author of this post."),
 

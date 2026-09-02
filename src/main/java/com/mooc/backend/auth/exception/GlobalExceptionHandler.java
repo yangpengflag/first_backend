@@ -3,6 +3,7 @@ package com.mooc.backend.auth.exception;
 import com.mooc.backend.auth.api.ErrorResponse;
 import com.mooc.backend.bookmarks.exception.BookmarkException;
 import com.mooc.backend.comments.exception.CommentException;
+import com.mooc.backend.places.exception.PlacesException;
 import com.mooc.backend.posts.exception.PostException;
 import com.mooc.backend.votes.exception.VoteException;
 import org.slf4j.Logger;
@@ -40,6 +41,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handlePostException(PostException ex) {
         return ResponseEntity.status(ex.getStatus())
                 .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
+    }
+
+    @ExceptionHandler(PlacesException.class)
+    public ResponseEntity<ErrorResponse> handlePlacesException(PlacesException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), null));
     }
 
     @ExceptionHandler(CommentException.class)
