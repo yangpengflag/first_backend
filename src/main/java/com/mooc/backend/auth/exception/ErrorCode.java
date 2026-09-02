@@ -55,6 +55,9 @@ public enum ErrorCode {
     /** 景点不存在（slug 未命中）。 */
     SPOT_NOT_FOUND(HttpStatus.NOT_FOUND, "Spot not found."),
 
+    /** 景点复合 slug 已存在（{citySlug}-{slugify(nameEn)} 冲突）。 */
+    SPOT_SLUG_CONFLICT(HttpStatus.CONFLICT, "Spot slug already exists."),
+
     /** 当前用户不是该帖子的作者，无权编辑。 */
     NOT_POST_AUTHOR(HttpStatus.FORBIDDEN, "You are not the author of this post."),
 

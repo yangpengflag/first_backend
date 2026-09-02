@@ -11,11 +11,13 @@ import com.mooc.backend.posts.api.PostStatsView;
 import com.mooc.backend.posts.api.PostSummary;
 import com.mooc.backend.posts.api.UpdatePostRequest;
 import com.mooc.backend.posts.domain.Post;
+import com.mooc.backend.posts.domain.PostSpot;
 import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.posts.exception.PostException;
 import com.mooc.backend.auth.exception.ErrorCode;
 import com.mooc.backend.posts.repository.PostRepository;
 import com.mooc.backend.posts.repository.PostSort;
+import com.mooc.backend.posts.repository.PostSpotRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +41,9 @@ import java.util.stream.Collectors;
  *
  * <p>列表读取（公开 / 我的）通过 {@code PostRepository} 的聚合查询实时取得互动统计，
  * 由 {@code PostListResponse} 统一信封返回（cursor 模式用于 latest 排序，offset 模式用于 top / most_commented）。
+ *
+ * <p>多 POI 关联（Spot）经 {@code PostSpotRepository} 读写 {@code post_spots} 关联表
+ * （替代早期 {@code Post.spot_ids} JSON 列），写路径先删后插刷新。
  */
 @Service
 public class PostService {
@@ -52,20 +57,24 @@ public class PostService {
 
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final PostSpotRepository postSpotRepository;
 
-    public PostService(PostRepository postRepository, UserRepository userRepository) {
+    public PostService(PostRepository postRepository, UserRepository userRepository,
+                       PostSpotRepository postSpotRepository) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
+        this.postSpotRepository = postSpotRepository;
     }
 
-    /** 创建帖子：authorId 取自 JWT 主体（控制器已覆盖），tag 归一化后落库。 */
+    /** 创建帖子：authorId 取自 JWT 主体（控制器已覆盖），tag 归一化后落库；景点关联写入 post_spots。 */
     public PostResponse create(UUID authorId, CreatePostRequest request, Instant now) {
         PostStatus status = request.status() == null ? PostStatus.DRAFT : request.status();
         List<String> tags = normalizeTags(request.tags());
         Post post = Post.create(authorId, request.title(), request.content(),
                 request.coverImageUrl(), tags, status,
-                trimToNull(request.cityId()), normalizeSpotIds(request.spotIds()), now);
+                trimToNull(request.cityId()), now);
         Post saved = postRepository.save(post);
+        savePostSpots(saved, request.spotSlugs());
         AuthorView author = resolveAuthor(authorId);
         return PostResponse.from(saved, author.name(), author.avatarUrl(),
                 MarkdownSummary.derive(saved.getContent()));
@@ -96,7 +105,7 @@ public class PostService {
         return PostListResponse.offset(items, safePage, safeSize, total);
     }
 
-    /** 公开列表按地点过滤（仅 PUBLISHED）：cityId 精确匹配，spotId 命中 spot_ids 数组；offset 分页。 */
+    /** 公开列表按地点过滤（仅 PUBLISHED）：cityId 精确匹配，spotId 命中 post_spots 关联表；offset 分页。 */
     public PostListResponse listByLocation(String sortParam, Integer page, Integer size,
                                            String cityId, String spotId, Instant now) {
         int safeSize = clampSize(size);
@@ -123,7 +132,7 @@ public class PostService {
                 MarkdownSummary.derive(post.getContent()));
     }
 
-    /** 编辑：仅作者本人；补丁式更新非空字段。 */
+    /** 编辑：仅作者本人；补丁式更新非空字段；景点关联 null 保留原值、非 null 刷新。 */
     public PostResponse update(UUID id, UUID authorId, UpdatePostRequest request, Instant now) {
         Post post = postRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new PostException(ErrorCode.POST_NOT_FOUND));
@@ -135,9 +144,9 @@ public class PostService {
         String cover = request.coverImageUrl() != null ? request.coverImageUrl() : post.getCoverImageUrl();
         List<String> tags = request.tags() != null ? normalizeTags(request.tags()) : post.getTags();
         PostStatus status = request.status() != null ? request.status() : post.getStatus();
-        List<String> spotIds = request.spotIds() != null ? normalizeSpotIds(request.spotIds()) : post.getSpotIds();
-        post.update(title, content, cover, tags, status, trimToNull(request.cityId()), spotIds, now);
+        post.update(title, content, cover, tags, status, trimToNull(request.cityId()), now);
         Post saved = postRepository.save(post);
+        savePostSpots(saved, request.spotSlugs());
         AuthorView author = resolveAuthor(saved.getAuthorId());
         return PostResponse.from(saved, author.name(), author.avatarUrl(),
                 MarkdownSummary.derive(saved.getContent()));
@@ -230,6 +239,21 @@ public class PostService {
         Instant ts = Instant.parse(s.substring(0, idx));
         UUID id = UUID.fromString(s.substring(idx + 1));
         return new Cursor(ts, id);
+    }
+
+    /** 景点关联写入 post_spots：null 表示补丁式更新保留原关联；非 null 先删后插刷新。 */
+    private void savePostSpots(Post post, List<String> spotSlugs) {
+        if (spotSlugs == null) {
+            return;
+        }
+        postSpotRepository.deleteByPostId(post.getId());
+        List<String> slugs = normalizeSpotIds(spotSlugs);
+        if (!slugs.isEmpty()) {
+            List<PostSpot> rows = slugs.stream()
+                    .map(slug -> PostSpot.create(post.getId(), slug, Instant.now()))
+                    .toList();
+            postSpotRepository.saveAll(rows);
+        }
     }
 
     /** tag 归一化：trim + 小写 + 去空 + 去重 + 上限 10（与入参校验双保险）。 */

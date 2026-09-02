@@ -4,6 +4,7 @@ import com.mooc.backend.bookmarks.domain.Bookmark;
 import com.mooc.backend.comments.domain.Comment;
 import com.mooc.backend.posts.api.PostStatsView;
 import com.mooc.backend.posts.domain.Post;
+import com.mooc.backend.posts.domain.PostSpot;
 import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.votes.domain.Vote;
 import com.mooc.backend.votes.domain.VoteType;
@@ -26,7 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 仓储层测试：验证 {@code AndDeletedFalse} 查询层软删过滤、tags JSON 列持久化，
- * 以及 {@code findPublishedStats} 的原生聚合查询（计数口径 / 排序 / 游标）。
+ * 以及 {@code findPublishedStats} / {@code findPublishedByLocation} 的原生聚合查询
+ * （计数口径 / 排序 / 游标 / 地点过滤）。
+ *
+ * <p>地点过滤（spotId）现走 {@code post_spots} 关联表 JOIN（替代早期 JSON 列），
+ * 本测试在构造帖子后显式写入 {@code post_spots} 行以验证反查。
  *
  * <p>软删通过原生 UPDATE / 实体 {@code softDelete} + 清空持久化上下文或同事务 flush 模拟，
  * 确保查询真正落库并应用过滤条件。测试在 {@code @Transactional} 下运行，结束后自动回滚，不污染库。
@@ -39,10 +44,13 @@ class PostRepositoryTest {
     private PostRepository postRepository;
 
     @Autowired
+    private PostSpotRepository postSpotRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     /**
-     * 测试前清空聚合相关的四张表，保证列表聚合查询只看到本测试构造的数据。
+     * 测试前清空聚合相关的表，保证列表聚合查询只看到本测试构造的数据。
      * 整个测试运行在 {@code @Transactional} 下，DELETE 会在事务结束时回滚，不破坏库中既有数据。
      */
     @BeforeEach
@@ -50,12 +58,13 @@ class PostRepositoryTest {
         entityManager.createNativeQuery("DELETE FROM votes").executeUpdate();
         entityManager.createNativeQuery("DELETE FROM bookmarks").executeUpdate();
         entityManager.createNativeQuery("DELETE FROM comments").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM post_spots").executeUpdate();
         entityManager.createNativeQuery("DELETE FROM posts").executeUpdate();
     }
 
     @Test
     void softDeletedPostExcludedFromQueries() {
-        Post post = Post.create(UUID.randomUUID(), "T", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), Instant.now());
+        Post post = Post.create(UUID.randomUUID(), "T", "c", null, List.of(), PostStatus.PUBLISHED, null, Instant.now());
         Post saved = postRepository.saveAndFlush(post);
 
         entityManager.createNativeQuery("UPDATE posts SET deleted = true WHERE id = ?1")
@@ -71,7 +80,7 @@ class PostRepositoryTest {
     @Test
     void tagsPersistedAndLoaded() {
         Post post = Post.create(UUID.randomUUID(), "T", "c", null,
-                List.of("Hiking", "Sichuan"), PostStatus.DRAFT, null, List.of(), Instant.now());
+                List.of("Hiking", "Sichuan"), PostStatus.DRAFT, null, Instant.now());
         Post saved = postRepository.saveAndFlush(post);
         entityManager.clear();
 
@@ -130,22 +139,29 @@ class PostRepositoryTest {
         assertThat(page.get(0).bookmarkCount()).isEqualTo(1);
     }
 
-    /** 地点过滤：cityId 精确匹配、spotId 命中 spot_ids 数组（JSON_CONTAINS），且忽略草稿与无地点帖。 */
+    /**
+     * 地点过滤：cityId 精确匹配（posts.city_id）、spotId 命中 post_spots 关联表 JOIN；
+     * 忽略草稿与无地点帖。DRAFT 帖即使关联了该 spot 也不应出现在公开列表。
+     */
     @Test
     void locationFilterMatchesCityAndSpot() {
         UUID author = UUID.randomUUID();
         Post hangzhouPost = postRepository.saveAndFlush(
                 Post.create(author, "HZ Post", "c", null, List.of(), PostStatus.PUBLISHED,
-                        "hangzhou", List.of("hangzhou-west-lake", "lingyin"), Instant.now()));
+                        "hangzhou", Instant.now()));
+        postSpotRepository.saveAll(List.of(
+                PostSpot.create(hangzhouPost.getId(), "hangzhou-west-lake", Instant.now()),
+                PostSpot.create(hangzhouPost.getId(), "lingyin", Instant.now())));
         postRepository.saveAndFlush(
                 Post.create(author, "Other", "c", null, List.of(), PostStatus.PUBLISHED,
-                        "chengdu", List.of(), Instant.now()));
+                        "chengdu", Instant.now()));
         postRepository.saveAndFlush(
                 Post.create(author, "None", "c", null, List.of(), PostStatus.PUBLISHED,
-                        null, List.of(), Instant.now()));
-        postRepository.saveAndFlush(
+                        null, Instant.now()));
+        Post draft = postRepository.saveAndFlush(
                 Post.create(author, "Draft", "c", null, List.of(), PostStatus.DRAFT,
-                        null, List.of("hangzhou-west-lake"), Instant.now()));
+                        null, Instant.now()));
+        postSpotRepository.saveAll(List.of(PostSpot.create(draft.getId(), "hangzhou-west-lake", Instant.now())));
         entityManager.clear();
 
         List<PostStatsView> byCity = postRepository.findPublishedByLocation(PostSort.LATEST, 10, 0, "hangzhou", null);
@@ -172,13 +188,13 @@ class PostRepositoryTest {
         UUID user3 = UUID.randomUUID();
 
         Post postA = postRepository.saveAndFlush(
-                Post.create(author, "A", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base.minus(Duration.ofHours(2))));
+                Post.create(author, "A", "c", null, List.of(), PostStatus.PUBLISHED, null, base.minus(Duration.ofHours(2))));
         Post postB = postRepository.saveAndFlush(
-                Post.create(author, "B", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base.minus(Duration.ofHours(1))));
+                Post.create(author, "B", "c", null, List.of(), PostStatus.PUBLISHED, null, base.minus(Duration.ofHours(1))));
         postRepository.saveAndFlush(
-                Post.create(author, "C", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), base.minus(Duration.ofHours(3))));
+                Post.create(author, "C", "c", null, List.of(), PostStatus.DRAFT, null, base.minus(Duration.ofHours(3))));
         Post postD = postRepository.saveAndFlush(
-                Post.create(author, "D", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base));
+                Post.create(author, "D", "c", null, List.of(), PostStatus.PUBLISHED, null, base));
         postD.softDelete(base);
         postRepository.saveAndFlush(postD);
 

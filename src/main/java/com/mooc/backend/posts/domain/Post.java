@@ -25,6 +25,9 @@ import java.util.UUID;
  * 以贴合 {@code database-conventions} 约定；{@code User} 因鉴权需查已删行，同样不加全局过滤。
  *
  * <p>{@code summary} 不存储，读取时由 {@code MarkdownSummary} 从 {@code content} 派生。
+ *
+ * <p>多 POI 关联（Spot）不再以 {@code spot_ids} JSON 列存储，改由关联表 {@code post_spots}
+ * 持有（见 {@code PostSpot}）；本实体仅保留单城市语境的 {@code cityId}（city slug）。
  */
 @Entity
 @Table(name = "posts", indexes = {
@@ -52,14 +55,9 @@ public class Post extends BaseEntity {
     @Column(name = "tags", nullable = false)
     private List<String> tags = new ArrayList<>();
 
-    /** 单城市语境地点关联（存 city slug，可选）。 */
+    /** 单城市语境地点关联（存 city slug，可选）。多 POI 关联走 post_spots 关联表。 */
     @Column(name = "city_id")
     private String cityId;
-
-    /** 多 POI 关联（存 Spot slug 数组，可选，缺省空数组）。 */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "spot_ids", nullable = false)
-    private List<String> spotIds = new ArrayList<>();
 
     protected Post() {
         // JPA only
@@ -67,7 +65,7 @@ public class Post extends BaseEntity {
 
     private Post(UUID id, UUID authorId, String title, String content,
                  String coverImageUrl, List<String> tags, PostStatus status,
-                 String cityId, List<String> spotIds, Instant now) {
+                 String cityId, Instant now) {
         super(id, now);
         this.authorId = authorId;
         this.title = title;
@@ -76,20 +74,19 @@ public class Post extends BaseEntity {
         this.tags = new ArrayList<>(tags);
         this.status = status;
         this.cityId = cityId;
-        this.spotIds = spotIds == null ? new ArrayList<>() : new ArrayList<>(spotIds);
     }
 
     /** 创建新帖子，主键与时间由调用方注入（与 BaseEntity / User 约定一致）。 */
     public static Post create(UUID authorId, String title, String content,
                               String coverImageUrl, List<String> tags, PostStatus status,
-                              String cityId, List<String> spotIds, Instant now) {
+                              String cityId, Instant now) {
         return new Post(UUID.randomUUID(), authorId, title, content, coverImageUrl, tags, status,
-                cityId, spotIds, now);
+                cityId, now);
     }
 
     /** 局部更新：仅替换调用方提供的非空字段，并刷新更新时间。地点字段为 null 时保留原值。 */
     public void update(String title, String content, String coverImageUrl,
-                       List<String> tags, PostStatus status, String cityId, List<String> spotIds,
+                       List<String> tags, PostStatus status, String cityId,
                        Instant now) {
         this.title = title;
         this.content = content;
@@ -99,9 +96,6 @@ public class Post extends BaseEntity {
         this.status = status;
         if (cityId != null) {
             this.cityId = cityId;
-        }
-        if (spotIds != null) {
-            this.spotIds = new ArrayList<>(spotIds);
         }
         this.touch(now);
     }
@@ -138,10 +132,6 @@ public class Post extends BaseEntity {
 
     public String getCityId() {
         return cityId;
-    }
-
-    public List<String> getSpotIds() {
-        return List.copyOf(spotIds);
     }
 
     public boolean isPublished() {

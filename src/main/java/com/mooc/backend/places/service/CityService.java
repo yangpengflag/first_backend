@@ -6,6 +6,7 @@ import com.mooc.backend.places.api.CityListResponse;
 import com.mooc.backend.places.api.CitySummary;
 import com.mooc.backend.places.api.SpotSummary;
 import com.mooc.backend.places.domain.City;
+import com.mooc.backend.places.domain.SpotStatus;
 import com.mooc.backend.places.exception.PlacesException;
 import com.mooc.backend.places.repository.CityRepository;
 import com.mooc.backend.places.repository.SpotRepository;
@@ -21,6 +22,7 @@ import java.util.List;
  * 城市读服务（只读）。列表按 {@code name} 升序分页，详情组装 Top POI 与相关攻略占位。
  *
  * <p>{@code postCount} / 相关攻略依赖 {@code post-location-tagging}（尚未落地），本期置 0 / 空列表。
+ * 城市 Top POI 与 spotCount 均仅统计 {@code PUBLISHED} 景点，与景点公开读一致。
  * 所有对外只读，不写实体。
  */
 @Service
@@ -45,18 +47,18 @@ public class CityService {
         City city = cityRepository.findBySlugAndDeletedFalse(slug)
                 .orElseThrow(() -> new PlacesException(ErrorCode.CITY_NOT_FOUND));
         List<SpotSummary> topSpots = spotRepository
-                .findByCitySlugAndDeletedFalse(slug,
+                .findByCitySlugAndStatusAndDeletedFalse(slug, SpotStatus.PUBLISHED,
                         PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "viewCount")))
                 .stream()
                 .map(SpotSummary::from)
                 .toList();
         // 相关攻略：post-location-tagging 落地前为空
-        long spotCount = spotRepository.countByCitySlugAndDeletedFalse(city.getSlug());
+        long spotCount = spotRepository.countByCitySlugAndStatusAndDeletedFalse(city.getSlug(), SpotStatus.PUBLISHED);
         return CityDetail.from(city, spotCount, topSpots, List.of());
     }
 
     private CitySummary toSummary(City city) {
-        long spotCount = spotRepository.countByCitySlugAndDeletedFalse(city.getSlug());
+        long spotCount = spotRepository.countByCitySlugAndStatusAndDeletedFalse(city.getSlug(), SpotStatus.PUBLISHED);
         return CitySummary.from(city, spotCount);
     }
 }

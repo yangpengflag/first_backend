@@ -23,7 +23,7 @@ public record CreatePostRequest(
         PostStatus status,
         /** 单城市语境地点关联（city slug），可选。 */
         String cityId,
-        /** 多 POI 关联（Spot slug 数组），可选，缺省空。 */
-        @Size(max = 20) List<@Size(max = 80) String> spotIds
+        /** 多 POI 关联（Spot slug 数组），可选，缺省空；写入 post_spots 关联表。 */
+        @Size(max = 20) List<@Size(max = 80) String> spotSlugs
 ) {
 }

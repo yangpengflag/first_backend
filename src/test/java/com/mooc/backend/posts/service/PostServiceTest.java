@@ -14,6 +14,7 @@ import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.posts.exception.PostException;
 import com.mooc.backend.posts.repository.PostRepository;
 import com.mooc.backend.posts.repository.PostSort;
+import com.mooc.backend.posts.repository.PostSpotRepository;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +46,9 @@ class PostServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PostSpotRepository postSpotRepository;
+
     @InjectMocks
     private PostService postService;
 
@@ -57,7 +61,7 @@ class PostServiceTest {
         CreatePostRequest req = new CreatePostRequest("Title", "Hello **world**",
                 null, List.of("Hiking ", "SICHUAN"), PostStatus.DRAFT, null, null);
         Post saved = Post.create(AUTHOR, "Title", "Hello **world**", null,
-                List.of("hiking", "sichuan"), PostStatus.DRAFT, null, List.of(), NOW);
+                List.of("hiking", "sichuan"), PostStatus.DRAFT, null, NOW);
         when(postRepository.save(any(Post.class))).thenReturn(saved);
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
 
@@ -73,7 +77,7 @@ class PostServiceTest {
     void listPublishedExcludesDraftsAndResolvesAuthorWithStats() {
         User alice = activeUser(AUTHOR, "Alice", null);
         UUID postId = UUID.randomUUID();
-        Post published = Post.create(AUTHOR, "P", "content here", null, List.of(), PostStatus.PUBLISHED, null, List.of(), NOW);
+        Post published = Post.create(AUTHOR, "P", "content here", null, List.of(), PostStatus.PUBLISHED, null, NOW);
         setId(published, postId);
         PostStatsView stat = new PostStatsView(postId, 3L, 6L, 2L);
         when(postRepository.findPublishedStats(any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
@@ -104,7 +108,7 @@ class PostServiceTest {
 
     @Test
     void getPublishedThrowsForDraft() {
-        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         when(postRepository.findByIdAndDeletedFalse(draft.getId())).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> postService.getPublished(draft.getId(), NOW))
@@ -113,7 +117,7 @@ class PostServiceTest {
 
     @Test
     void updateRejectsNonAuthor() {
-        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> postService.update(post.getId(), UUID.randomUUID(),
@@ -124,7 +128,7 @@ class PostServiceTest {
     @Test
     void updatePublishesDraft() {
         User alice = activeUser(AUTHOR, "Alice", null);
-        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
         when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.findAllById(anyList())).thenReturn(List.of(alice));
@@ -137,7 +141,7 @@ class PostServiceTest {
 
     @Test
     void deleteRejectsNonAuthor() {
-        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> postService.delete(post.getId(), UUID.randomUUID(), NOW))
@@ -146,7 +150,7 @@ class PostServiceTest {
 
     @Test
     void deleteSoftRemovesPost() {
-        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.PUBLISHED, null, NOW);
         when(postRepository.findByIdAndDeletedFalse(post.getId())).thenReturn(Optional.of(post));
         when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -159,7 +163,7 @@ class PostServiceTest {
     void listMineReturnsAllStatusesWithStats() {
         User alice = activeUser(AUTHOR, "Alice", null);
         UUID postId = UUID.randomUUID();
-        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         setId(draft, postId);
         PostStatsView stat = new PostStatsView(postId, 0L, 0L, 0L);
         when(postRepository.findMyStats(any(), any(), anyInt(), anyInt(), any(), any(), anyBoolean()))
@@ -176,7 +180,7 @@ class PostServiceTest {
 
     @Test
     void listPublishedOffsetReportsHasMoreAndNullCursor() {
-        Post published = Post.create(AUTHOR, "P", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), NOW);
+        Post published = Post.create(AUTHOR, "P", "c", null, List.of(), PostStatus.PUBLISHED, null, NOW);
         UUID postId = UUID.randomUUID();
         setId(published, postId);
         PostStatsView stat = new PostStatsView(postId, 1L, 1L, 1L);
@@ -198,7 +202,7 @@ class PostServiceTest {
 
     @Test
     void listMineOffsetReportsHasMore() {
-        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post draft = Post.create(AUTHOR, "D", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
         UUID postId = UUID.randomUUID();
         setId(draft, postId);
         PostStatsView stat = new PostStatsView(postId, 1L, 1L, 1L);

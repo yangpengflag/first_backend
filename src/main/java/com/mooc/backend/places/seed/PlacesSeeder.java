@@ -4,6 +4,7 @@ import com.mooc.backend.places.domain.City;
 import com.mooc.backend.places.domain.CitySlugs;
 import com.mooc.backend.places.domain.Spot;
 import com.mooc.backend.places.domain.SpotCategory;
+import com.mooc.backend.places.domain.SpotStatus;
 import com.mooc.backend.places.repository.CityRepository;
 import com.mooc.backend.places.repository.SpotRepository;
 
@@ -78,7 +79,7 @@ public class PlacesSeeder implements ApplicationRunner {
                 citySlug, spot.category(), List.of(), null, null, null, null, null,
                 coverImage(spotSlug), List.of(coverImage(spotSlug + "-gallery")),
                 spot.summaryEn(), spot.summaryZh(), spot.descriptionEn(), spot.descriptionZh(),
-                null, null, null, null, false, false, Instant.now()));
+                null, null, null, null, false, false, SpotStatus.PUBLISHED, Instant.now()));
         log.info("Seeded spot {}", spotSlug);
     }
 

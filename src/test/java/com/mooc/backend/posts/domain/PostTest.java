@@ -15,7 +15,7 @@ class PostTest {
 
     @Test
     void createAssignsIdAndDefaults() {
-        Post post = Post.create(AUTHOR, "Title", "Body", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "Title", "Body", null, List.of(), PostStatus.DRAFT, null, NOW);
 
         assertThat(post.getId()).isNotNull();
         assertThat(post.getStatus()).isEqualTo(PostStatus.DRAFT);
@@ -27,11 +27,11 @@ class PostTest {
 
     @Test
     void updateReplacesProvidedFieldsAndTouchesUpdatedAt() {
-        Post post = Post.create(AUTHOR, "Title", "Body", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
+        Post post = Post.create(AUTHOR, "Title", "Body", null, List.of(), PostStatus.DRAFT, null, NOW);
         Instant later = NOW.plusSeconds(60);
 
         post.update("NewTitle", "NewBody", "http://x/y.png",
-                List.of("a", "b"), PostStatus.PUBLISHED, null, List.of(), later);
+                List.of("a", "b"), PostStatus.PUBLISHED, null, later);
 
         assertThat(post.getTitle()).isEqualTo("NewTitle");
         assertThat(post.getContent()).isEqualTo("NewBody");
@@ -43,8 +43,8 @@ class PostTest {
 
     @Test
     void isPublishedReflectsStatus() {
-        Post draft = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), NOW);
-        Post published = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), NOW);
+        Post draft = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.DRAFT, null, NOW);
+        Post published = Post.create(AUTHOR, "T", "c", null, List.of(), PostStatus.PUBLISHED, null, NOW);
 
         assertThat(draft.isPublished()).isFalse();
         assertThat(published.isPublished()).isTrue();

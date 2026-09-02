@@ -19,4 +19,12 @@ public interface SpotRepositoryCustom {
     List<Spot> search(String city, String category, String tag, String q, String sort, Pageable pageable);
 
     long countSearch(String city, String category, String tag, String q);
+
+    /**
+     * 排行榜查询：仅 PUBLISHED 且未软删。
+     *
+     * @param type   rating（无评分沉底）/ popular（view_count 降序）/ bookmarks（实时聚合收藏数降序）
+     * @param pageable 仅用 {@code pageSize} 作 LIMIT（offset 固定 0）
+     */
+    List<Spot> ranking(String type, Pageable pageable);
 }

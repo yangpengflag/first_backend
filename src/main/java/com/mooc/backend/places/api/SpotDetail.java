@@ -23,14 +23,14 @@ public class SpotDetail extends SpotSummary {
     @JsonProperty("related_posts") private final List<PostSummary> relatedPosts;
     @JsonProperty("nearby_spots") private final List<SpotSummary> nearbySpots;
 
-    SpotDetail(String slug, String nameZh, String nameEn, String citySlug, String category,
+    SpotDetail(String slug, String nameZh, String nameEn, String citySlug, String category, String status,
                List<String> tags, String level, String addressEn, String addressZh, Double lat, Double lng,
                String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
                String openingHours, String ticketInfo, String visitDuration, long viewCount,
                long postCount, Double rating, boolean featured, boolean hiddenGem,
                String descriptionEn, String descriptionZh,
                List<PostSummary> relatedPosts, List<SpotSummary> nearbySpots) {
-        super(slug, nameZh, nameEn, citySlug, category, tags, level, addressEn, addressZh, lat, lng,
+        super(slug, nameZh, nameEn, citySlug, category, status, tags, level, addressEn, addressZh, lat, lng,
                 coverImageUrl, galleryUrls, summaryEn, summaryZh, openingHours, ticketInfo,
                 visitDuration, viewCount, postCount, rating, featured, hiddenGem);
         this.descriptionEn = descriptionEn;
@@ -41,7 +41,9 @@ public class SpotDetail extends SpotSummary {
 
     public static SpotDetail from(Spot spot, List<SpotSummary> nearby, List<PostSummary> relatedPosts) {
         return new SpotDetail(spot.getSlug(), spot.getNameZh(), spot.getNameEn(), spot.getCitySlug(),
-                spot.getCategory() == null ? null : spot.getCategory().name(), spot.getTags(),
+                spot.getCategory() == null ? null : spot.getCategory().name(),
+                spot.getStatus() == null ? null : spot.getStatus().name(),
+                spot.getTags(),
                 spot.getLevel(), spot.getAddressEn(), spot.getAddressZh(), spot.getLat(), spot.getLng(),
                 spot.getCoverImageUrl(), spot.getGalleryUrls(), spot.getSummaryEn(), spot.getSummaryZh(),
                 spot.getOpeningHours(), spot.getTicketInfo(), spot.getVisitDuration(),

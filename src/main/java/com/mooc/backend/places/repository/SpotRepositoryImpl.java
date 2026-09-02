@@ -24,7 +24,7 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
 
     @Override
     public List<Spot> search(String city, String category, String tag, String q, String sort, Pageable pageable) {
-        String where = "WHERE s.deleted = false";
+        String where = "WHERE s.deleted = false AND s.status = 'PUBLISHED'";
         if (isNotBlank(city)) {
             where += " AND s.city_slug = :city";
         }
@@ -51,7 +51,7 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
             query.setParameter("category", category);
         }
         if (isNotBlank(tag)) {
-            query.setParameter("tagJson", "\"" + tag + "\"");
+            query.setParameter("tagJson", jsonQuote(tag));
         }
         if (isNotBlank(q)) {
             query.setParameter("q", "%" + q + "%");
@@ -62,8 +62,33 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
     }
 
     @Override
+    public List<Spot> ranking(String type, Pageable pageable) {
+        String orderBy;
+        String from;
+        if ("bookmarks".equals(type)) {
+            // 主排序按实时聚合收藏数；并列时以 view_count 作 tiebreaker，保证结果确定（契约仅要求按收藏数 DESC）
+            orderBy = "ORDER BY COALESCE(b.cnt, 0) DESC, s.view_count DESC";
+            from = "FROM spots s LEFT JOIN (SELECT spot_slug, COUNT(*) AS cnt FROM spot_bookmarks GROUP BY spot_slug) b "
+                    + "ON s.slug = b.spot_slug";
+        } else if ("rating".equals(type)) {
+            // MySQL 不支持 NULLS LAST 语法：用 IS NULL ASC 把无评分排到末尾
+            orderBy = "ORDER BY s.rating IS NULL ASC, s.rating DESC";
+            from = "FROM spots s";
+        } else {
+            // popular（默认）：按访问计数降序
+            orderBy = "ORDER BY s.view_count DESC";
+            from = "FROM spots s";
+        }
+        String sql = "SELECT s.* " + from
+                + " WHERE s.deleted = false AND s.status = 'PUBLISHED' " + orderBy + " LIMIT :limit";
+        var query = em.createNativeQuery(sql, Spot.class);
+        query.setParameter("limit", pageable.getPageSize());
+        return query.getResultList();
+    }
+
+    @Override
     public long countSearch(String city, String category, String tag, String q) {
-        String where = "WHERE s.deleted = false";
+        String where = "WHERE s.deleted = false AND s.status = 'PUBLISHED'";
         if (isNotBlank(city)) {
             where += " AND s.city_slug = :city";
         }
@@ -85,7 +110,7 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
             query.setParameter("category", category);
         }
         if (isNotBlank(tag)) {
-            query.setParameter("tagJson", "\"" + tag + "\"");
+            query.setParameter("tagJson", jsonQuote(tag));
         }
         if (isNotBlank(q)) {
             query.setParameter("q", "%" + q + "%");
@@ -95,5 +120,10 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
 
     private static boolean isNotBlank(String s) {
         return s != null && !s.isBlank();
+    }
+
+    /** 把字符串包成合法的 JSON 字符串字面量（转义反斜杠与双引号），供 JSON_CONTAINS 使用。 */
+    private static String jsonQuote(String s) {
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 }

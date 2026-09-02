@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.mooc.backend.dto.response.BaseResponse;
 import com.mooc.backend.places.domain.Spot;
+import com.mooc.backend.places.domain.SpotStatus;
 
 import java.util.List;
 
@@ -11,7 +12,8 @@ import java.util.List;
  * 景点列表项 / 嵌套项（周边 POI、城市 Top POI）出网白名单 DTO（snake_case）。
  *
  * <p>{@code postCount} 依赖 {@code post-location-tagging}（尚未落地），本期置 0。
- * {@code rating} 可空（AI 爬虫估算，缺省 UI 不渲染评分区块）。{@code category} 序列化枚举名（小写英文）。
+ * {@code rating} 可空（AI 爬虫估算，缺省 UI 不渲染评分区块）。{@code category} / {@code status}
+ * 序列化枚举名（小写英文）。{@code status} 标识发布状态，公开读仅返回 PUBLISHED。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public class SpotSummary extends BaseResponse {
@@ -21,6 +23,7 @@ public class SpotSummary extends BaseResponse {
     @JsonProperty("name_en") private final String nameEn;
     @JsonProperty("city_slug") private final String citySlug;
     @JsonProperty("category") private final String category;
+    @JsonProperty("status") private final String status;
     @JsonProperty("tags") private final List<String> tags;
     @JsonProperty("level") private final String level;
     @JsonProperty("address_en") private final String addressEn;
@@ -40,7 +43,7 @@ public class SpotSummary extends BaseResponse {
     @JsonProperty("featured") private final boolean featured;
     @JsonProperty("hidden_gem") private final boolean hiddenGem;
 
-    SpotSummary(String slug, String nameZh, String nameEn, String citySlug, String category,
+    SpotSummary(String slug, String nameZh, String nameEn, String citySlug, String category, String status,
                 List<String> tags, String level, String addressEn, String addressZh, Double lat, Double lng,
                 String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
                 String openingHours, String ticketInfo, String visitDuration, long viewCount,
@@ -51,6 +54,7 @@ public class SpotSummary extends BaseResponse {
         this.nameEn = nameEn;
         this.citySlug = citySlug;
         this.category = category;
+        this.status = status;
         this.tags = tags;
         this.level = level;
         this.addressEn = addressEn;
@@ -73,7 +77,9 @@ public class SpotSummary extends BaseResponse {
 
     public static SpotSummary from(Spot spot) {
         return new SpotSummary(spot.getSlug(), spot.getNameZh(), spot.getNameEn(), spot.getCitySlug(),
-                spot.getCategory() == null ? null : spot.getCategory().name(), spot.getTags(),
+                spot.getCategory() == null ? null : spot.getCategory().name(),
+                spot.getStatus() == null ? null : spot.getStatus().name(),
+                spot.getTags(),
                 spot.getLevel(), spot.getAddressEn(), spot.getAddressZh(), spot.getLat(), spot.getLng(),
                 spot.getCoverImageUrl(), spot.getGalleryUrls(), spot.getSummaryEn(), spot.getSummaryZh(),
                 spot.getOpeningHours(), spot.getTicketInfo(), spot.getVisitDuration(),
@@ -85,6 +91,7 @@ public class SpotSummary extends BaseResponse {
     public String getNameEn() { return nameEn; }
     public String getCitySlug() { return citySlug; }
     public String getCategory() { return category; }
+    public String getStatus() { return status; }
     public List<String> getTags() { return tags; }
     public String getLevel() { return level; }
     public String getAddressEn() { return addressEn; }

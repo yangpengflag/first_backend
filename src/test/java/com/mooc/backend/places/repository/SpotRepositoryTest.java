@@ -2,6 +2,7 @@ package com.mooc.backend.places.repository;
 
 import com.mooc.backend.places.domain.Spot;
 import com.mooc.backend.places.domain.SpotCategory;
+import com.mooc.backend.places.domain.SpotStatus;
 
 import jakarta.persistence.EntityManager;
 
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 景点仓储测试：验证 slug 唯一约束、列表多条件筛选（city / category / tag / q）、排序
  * （popular / hidden）、总数统计，以及城市 Top POI / 周边 POI / spotCount 聚合。
+ * 公开读仅返回 PUBLISHED：DRAFT 行存在但不出现在任何公开读路径。
  * 运行于 {@code @Transactional}，结束自动回滚，不污染库。
  */
 @SpringBootTest
@@ -46,7 +48,7 @@ class SpotRepositoryTest {
                           boolean hiddenGem, List<String> tags, String nameEn) {
         Spot spot = Spot.create(UUID.randomUUID(), slug, "景", nameEn, citySlug, category, tags,
                 null, null, null, 30.0, 120.0, null, List.of(), "en", "zh",
-                "en", "zh", null, null, null, null, false, hiddenGem, Instant.now());
+                "en", "zh", null, null, null, null, false, hiddenGem, SpotStatus.PUBLISHED, Instant.now());
         for (int i = 0; i < viewCount; i++) {
             spot.incrementViewCount();
         }
@@ -101,14 +103,32 @@ class SpotRepositoryTest {
         spotRepository.saveAndFlush(makeSpot("hangzhou-a", "hangzhou", SpotCategory.NATURE, 5, false, List.of(), "A"));
         Spot b = spotRepository.saveAndFlush(makeSpot("hangzhou-b", "hangzhou", SpotCategory.NATURE, 10, false, List.of(), "B"));
 
-        List<Spot> top = spotRepository.findByCitySlugAndDeletedFalse("hangzhou",
+        List<Spot> top = spotRepository.findByCitySlugAndStatusAndDeletedFalse("hangzhou", SpotStatus.PUBLISHED,
                 PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "viewCount")));
         assertThat(top).extracting(Spot::getSlug).containsExactly("hangzhou-b", "hangzhou-a");
 
-        List<Spot> nearby = spotRepository.findByCitySlugAndDeletedFalseAndIdNot("hangzhou", b.getId(),
+        List<Spot> nearby = spotRepository.findByCitySlugAndStatusAndDeletedFalseAndIdNot("hangzhou", SpotStatus.PUBLISHED, b.getId(),
                 PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "viewCount")));
         assertThat(nearby).extracting(Spot::getSlug).containsExactly("hangzhou-a");
 
-        assertThat(spotRepository.countByCitySlugAndDeletedFalse("hangzhou")).isEqualTo(2);
+        assertThat(spotRepository.countByCitySlugAndStatusAndDeletedFalse("hangzhou", SpotStatus.PUBLISHED)).isEqualTo(2);
+    }
+
+    /** 公开列表 / 城市 Top POI 仅返回 PUBLISHED：DRAFT 行存在但不出现在任何公开读路径。 */
+    @Test
+    void draftSpotExcludedFromPublicReads() {
+        Spot draft = Spot.create(UUID.randomUUID(), "hangzhou-draft", "草稿", "Draft", "hangzhou",
+                SpotCategory.NATURE, List.of(), null, null, null, null, null, null, List.of(),
+                "en", "zh", "en", "zh", null, null, null, null, false, false, SpotStatus.DRAFT, Instant.now());
+        spotRepository.saveAndFlush(draft);
+        em.clear();
+
+        List<Spot> publicSearch = spotRepository.search("hangzhou", null, null, null, "popular", PageRequest.of(0, 10));
+        assertThat(publicSearch).noneMatch(s -> s.getSlug().equals("hangzhou-draft"));
+        // 草稿行本身存在（仅不公开展示）
+        assertThat(spotRepository.findBySlugAndDeletedFalse("hangzhou-draft")).isPresent();
+        assertThat(spotRepository.findByCitySlugAndStatusAndDeletedFalse("hangzhou", SpotStatus.PUBLISHED,
+                PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "viewCount"))))
+                .noneMatch(s -> s.getSlug().equals("hangzhou-draft"));
     }
 }

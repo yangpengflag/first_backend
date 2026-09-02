@@ -3,6 +3,7 @@ package com.mooc.backend.places.api;
 import com.mooc.backend.places.domain.City;
 import com.mooc.backend.places.domain.Spot;
 import com.mooc.backend.places.domain.SpotCategory;
+import com.mooc.backend.places.domain.SpotStatus;
 import com.mooc.backend.places.repository.CityRepository;
 import com.mooc.backend.places.repository.SpotRepository;
 
@@ -29,8 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 城市 / 景点 HTTP 层集成测试：覆盖公开列表、详情、未知 slug → 404（error.code），
  * 以及景点列表按城市筛选。公开端点免鉴权，直接 GET 即可。
  *
- * <p>{@code city-module} 精简后：城市列表无筛选参数、默认 name 升序；出网字段为
- * {@code slug/name/name_zh/cover_image/description/best_season/spot_count}。
+ * <p>公开读仅返回 PUBLISHED：DRAFT 景点经详情端点返回 404（与不存在同处理）。
+ * 城市列表无筛选参数、默认 name 升序；出网字段为 slug/name/name_zh/cover_image/description/best_season/spot_count。
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,7 +63,7 @@ class PlacesApiTest {
                 SpotCategory.NATURE, List.of("免费", "出片"), "5A", "West Lake, Hangzhou", "杭州西湖",
                 30.25, 120.14, "https://img/s.jpg", List.of("https://img/s1.jpg"),
                 "West Lake summary.", "西湖简介。", "West Lake description.", "西湖详述。",
-                "06:00-20:00", "free", "2h", 4.7, true, false, Instant.now());
+                "06:00-20:00", "free", "2h", 4.7, true, false, SpotStatus.PUBLISHED, Instant.now());
         spotRepository.saveAndFlush(spot);
     }
 
@@ -114,6 +115,19 @@ class PlacesApiTest {
     @Test
     void unknownSpotReturns404() throws Exception {
         mockMvc.perform(get("/api/spots/nope"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("SPOT_NOT_FOUND"));
+    }
+
+    /** 公开详情对 DRAFT 景点返回 404（与不存在同处理）。 */
+    @Test
+    void draftSpotDetailReturns404() throws Exception {
+        Spot draft = Spot.create(UUID.randomUUID(), "hangzhou-draft-spot", "草稿", "Draft", "hangzhou",
+                SpotCategory.NATURE, List.of(), null, null, null, null, null, null, List.of(),
+                "en", "zh", "en", "zh", null, null, null, null, false, false, SpotStatus.DRAFT, Instant.now());
+        spotRepository.saveAndFlush(draft);
+
+        mockMvc.perform(get("/api/spots/hangzhou-draft-spot"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("SPOT_NOT_FOUND"));
     }

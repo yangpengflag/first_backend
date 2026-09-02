@@ -74,15 +74,16 @@ public class PostRepositoryImpl implements PostRepositoryCustom {
     @Override
     public List<PostStatsView> findPublishedByLocation(PostSort sort, int size, int offset,
                                                        String cityId, String spotId) {
+        String join = spotId != null ? " JOIN post_spots ps ON p.id = ps.post_id " : "";
         String where = "WHERE p.status = 'PUBLISHED' AND p.deleted = false"
                 + (cityId != null ? " AND p.city_id = :cityId" : "")
-                + (spotId != null ? " AND JSON_CONTAINS(p.spot_ids, JSON_QUOTE(:spotId))" : "");
+                + (spotId != null ? " AND ps.spot_slug = :spotId" : "");
         String order = switch (sort) {
             case TOP -> ORDER_TOP;
             case MOST_COMMENTED -> ORDER_COMMENTED;
             default -> ORDER_LATEST;
         };
-        String full = SELECT_CLAUSE + where + " GROUP BY p.id ORDER BY " + order
+        String full = SELECT_CLAUSE + join + where + " GROUP BY p.id ORDER BY " + order
                 + " LIMIT :limit OFFSET :offset";
         var q = em.createNativeQuery(full);
         q.setParameter("limit", size);
@@ -98,10 +99,11 @@ public class PostRepositoryImpl implements PostRepositoryCustom {
 
     @Override
     public long countPublishedByLocation(String cityId, String spotId) {
+        String join = spotId != null ? " JOIN post_spots ps ON p.id = ps.post_id " : "";
         String where = "WHERE p.status = 'PUBLISHED' AND p.deleted = false"
                 + (cityId != null ? " AND p.city_id = :cityId" : "")
-                + (spotId != null ? " AND JSON_CONTAINS(p.spot_ids, JSON_QUOTE(:spotId))" : "");
-        var q = em.createNativeQuery("SELECT COUNT(DISTINCT p.id) FROM posts p " + where);
+                + (spotId != null ? " AND ps.spot_slug = :spotId" : "");
+        var q = em.createNativeQuery("SELECT COUNT(DISTINCT p.id) FROM posts p " + join + where);
         if (cityId != null) {
             q.setParameter("cityId", cityId);
         }

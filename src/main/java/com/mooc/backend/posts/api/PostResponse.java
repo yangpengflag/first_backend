@@ -17,6 +17,8 @@ import java.util.UUID;
  * 等审计字段；作者信息仅限 {@code author_name} / {@code author_avatar_url}，
  * 不得携带 {@code email} 等隐私字段。由 {@code PostResponseSerializationTest} 断言回归。
  * 继承 {@code BaseResponse} 自带 request_id。
+ *
+ * <p>多 POI 关联（Spot）已迁移至 {@code post_spots} 关联表，本 DTO 不再暴露 {@code spot_ids}。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public class PostResponse extends BaseResponse {
@@ -34,12 +36,11 @@ public class PostResponse extends BaseResponse {
     @JsonProperty("created_at") private final Instant createdAt;
     @JsonProperty("updated_at") private final Instant updatedAt;
     @JsonProperty("city_id") private final String cityId;
-    @JsonProperty("spot_ids") private final List<String> spotIds;
 
     public PostResponse(UUID id, String title, String content, String coverImageUrl, List<String> tags,
                         String status, UUID authorId, String authorName, String authorAvatarUrl,
                         String summary, Instant createdAt, Instant updatedAt,
-                        String cityId, List<String> spotIds) {
+                        String cityId) {
         super();
         this.id = id;
         this.title = title;
@@ -54,13 +55,12 @@ public class PostResponse extends BaseResponse {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.cityId = cityId;
-        this.spotIds = spotIds == null ? List.of() : spotIds;
     }
 
     public static final Set<String> WHITELISTED_FIELDS = Set.of(
             "id", "title", "content", "cover_image_url", "tags", "status",
             "author_id", "author_name", "author_avatar_url", "summary", "created_at", "updated_at",
-            "city_id", "spot_ids", "request_id");
+            "city_id", "request_id");
 
     public static PostResponse from(Post post, String authorName, String authorAvatarUrl, String summary) {
         return new PostResponse(
@@ -76,8 +76,7 @@ public class PostResponse extends BaseResponse {
                 summary,
                 post.getCreatedAt(),
                 post.getUpdatedAt(),
-                post.getCityId(),
-                post.getSpotIds());
+                post.getCityId());
     }
 
     public UUID getId() { return id; }
@@ -93,5 +92,4 @@ public class PostResponse extends BaseResponse {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public String getCityId() { return cityId; }
-    public List<String> getSpotIds() { return spotIds; }
 }

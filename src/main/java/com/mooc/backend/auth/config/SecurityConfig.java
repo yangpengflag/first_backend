@@ -92,11 +92,15 @@ public class SecurityConfig {
                         // 帖子公开读端点（列表 / 详情）免鉴权；写操作与 /me 仍走 anyRequest().authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/posts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/me").authenticated()
+                        // 帖子收藏状态查询需鉴权：精确路径须排在下方 GET /api/posts/* 公开读通配之前
+                        .requestMatchers(HttpMethod.GET, "/api/posts/*/bookmark").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/posts/*").permitAll()
                         // 城市 / 景点公开读端点（列表 / 详情）免鉴权（change: api-spots）
                         .requestMatchers(HttpMethod.GET, "/api/cities").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cities/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/spots").permitAll()
+                        // 景点收藏状态查询需鉴权：精确路径须排在下方 GET /api/spots/* 公开读通配之前
+                        .requestMatchers(HttpMethod.GET, "/api/spots/*/bookmark").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/spots/*").permitAll()
                         .anyRequest().authenticated()
                 )

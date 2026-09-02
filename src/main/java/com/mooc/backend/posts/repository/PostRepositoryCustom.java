@@ -23,7 +23,7 @@ public interface PostRepositoryCustom {
     List<PostStatsView> findMyStats(UUID authorId, PostSort sort, int size, int offset,
                                     Instant cursorTs, UUID cursorId, boolean useCursor);
 
-    /** 按地点过滤的公开列表聚合（仅 PUBLISHED）：cityId 精确匹配，spotId 命中 spot_ids 数组（JSON_CONTAINS）。offset 分页。 */
+    /** 按地点过滤的公开列表聚合（仅 PUBLISHED）：cityId 精确匹配，spotId 经 post_spots 关联表 JOIN 反查（非旧 spot_ids JSON 列）。offset 分页。 */
     List<PostStatsView> findPublishedByLocation(PostSort sort, int size, int offset,
                                                 String cityId, String spotId);
 

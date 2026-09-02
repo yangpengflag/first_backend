@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -23,6 +24,7 @@ import java.util.UUID;
  * {@code citySlug} 非空（归属 + 消歧），写入由 service 层校验城市存在（见 {@code SpotService}）。
  * {@code category} 以英文枚举持久化；{@code tags} / {@code galleryUrls} 为 JSON 数组。
  * {@code rating} 可空（AI 爬虫估算，缺省 UI 不渲染）；{@code postCount} 由聚合查询产出、不冗余存储。
+ * {@code status} 发布状态（DRAFT / PUBLISHED），公开读仅返回 PUBLISHED。
  */
 @Entity
 @Table(name = "spots")
@@ -103,6 +105,11 @@ public class Spot extends BaseEntity {
     @Column(name = "hidden_gem", nullable = false)
     private boolean hiddenGem = false;
 
+    @Enumerated(EnumType.STRING)
+    @ColumnDefault("'PUBLISHED'")
+    @Column(name = "status", nullable = false, length = 16)
+    private SpotStatus status = SpotStatus.PUBLISHED;
+
     protected Spot() {
         // JPA only
     }
@@ -111,7 +118,8 @@ public class Spot extends BaseEntity {
                 List<String> tags, String level, String addressEn, String addressZh, Double lat, Double lng,
                 String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
                 String descriptionEn, String descriptionZh, String openingHours, String ticketInfo,
-                String visitDuration, Double rating, boolean featured, boolean hiddenGem, Instant now) {
+                String visitDuration, Double rating, boolean featured, boolean hiddenGem,
+                SpotStatus status, Instant now) {
         super(id, now);
         this.slug = slug;
         this.nameZh = nameZh;
@@ -136,21 +144,104 @@ public class Spot extends BaseEntity {
         this.rating = rating;
         this.featured = featured;
         this.hiddenGem = hiddenGem;
+        this.status = status;
     }
 
     public static Spot create(UUID id, String slug, String nameZh, String nameEn, String citySlug, SpotCategory category,
                               List<String> tags, String level, String addressEn, String addressZh, Double lat, Double lng,
                               String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
                               String descriptionEn, String descriptionZh, String openingHours, String ticketInfo,
-                              String visitDuration, Double rating, boolean featured, boolean hiddenGem, Instant now) {
+                              String visitDuration, Double rating, boolean featured, boolean hiddenGem,
+                              SpotStatus status, Instant now) {
         return new Spot(id, slug, nameZh, nameEn, citySlug, category, tags, level, addressEn, addressZh, lat, lng,
                 coverImageUrl, galleryUrls, summaryEn, summaryZh, descriptionEn, descriptionZh,
-                openingHours, ticketInfo, visitDuration, rating, featured, hiddenGem, now);
+                openingHours, ticketInfo, visitDuration, rating, featured, hiddenGem, status, now);
     }
 
     /** 详情访问计数 +1（异步防刷在 {@code ViewCountService} 中调度，此处仅改内存态）。 */
     public void incrementViewCount() {
         this.viewCount++;
+    }
+
+    /**
+     * 局部更新：仅替换调用方提供的非空字段，并刷新更新时间。
+     * slug / citySlug 不可变（创建时推导），不在此接收；Primitive 包装类型（Boolean）为 null 时保留原值。
+     */
+    public void update(String nameZh, String nameEn, SpotCategory category, List<String> tags,
+                       String level, String addressEn, String addressZh, Double lat, Double lng,
+                       String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
+                       String descriptionEn, String descriptionZh, String openingHours, String ticketInfo,
+                       String visitDuration, Double rating, Boolean featured, Boolean hiddenGem,
+                       SpotStatus status, Instant now) {
+        if (nameZh != null) {
+            this.nameZh = nameZh;
+        }
+        if (nameEn != null) {
+            this.nameEn = nameEn;
+        }
+        if (category != null) {
+            this.category = category;
+        }
+        if (tags != null) {
+            this.tags.clear();
+            this.tags.addAll(tags);
+        }
+        if (level != null) {
+            this.level = level;
+        }
+        if (addressEn != null) {
+            this.addressEn = addressEn;
+        }
+        if (addressZh != null) {
+            this.addressZh = addressZh;
+        }
+        if (lat != null) {
+            this.lat = lat;
+        }
+        if (lng != null) {
+            this.lng = lng;
+        }
+        if (coverImageUrl != null) {
+            this.coverImageUrl = coverImageUrl;
+        }
+        if (galleryUrls != null) {
+            this.galleryUrls.clear();
+            this.galleryUrls.addAll(galleryUrls);
+        }
+        if (summaryEn != null) {
+            this.summaryEn = summaryEn;
+        }
+        if (summaryZh != null) {
+            this.summaryZh = summaryZh;
+        }
+        if (descriptionEn != null) {
+            this.descriptionEn = descriptionEn;
+        }
+        if (descriptionZh != null) {
+            this.descriptionZh = descriptionZh;
+        }
+        if (openingHours != null) {
+            this.openingHours = openingHours;
+        }
+        if (ticketInfo != null) {
+            this.ticketInfo = ticketInfo;
+        }
+        if (visitDuration != null) {
+            this.visitDuration = visitDuration;
+        }
+        if (rating != null) {
+            this.rating = rating;
+        }
+        if (featured != null) {
+            this.featured = featured;
+        }
+        if (hiddenGem != null) {
+            this.hiddenGem = hiddenGem;
+        }
+        if (status != null) {
+            this.status = status;
+        }
+        this.touch(now);
     }
 
     public String getSlug() {
@@ -247,5 +338,9 @@ public class Spot extends BaseEntity {
 
     public boolean isHiddenGem() {
         return hiddenGem;
+    }
+
+    public SpotStatus getStatus() {
+        return status;
     }
 }
