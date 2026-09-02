@@ -71,6 +71,46 @@ public class PostRepositoryImpl implements PostRepositoryCustom {
         return query(SELECT_CLAUSE + where + " GROUP BY p.id", sort, size, offset, cursorTs, cursorId, useCursor, authorId);
     }
 
+    @Override
+    public List<PostStatsView> findPublishedByLocation(PostSort sort, int size, int offset,
+                                                       String cityId, String spotId) {
+        String where = "WHERE p.status = 'PUBLISHED' AND p.deleted = false"
+                + (cityId != null ? " AND p.city_id = :cityId" : "")
+                + (spotId != null ? " AND JSON_CONTAINS(p.spot_ids, JSON_QUOTE(:spotId))" : "");
+        String order = switch (sort) {
+            case TOP -> ORDER_TOP;
+            case MOST_COMMENTED -> ORDER_COMMENTED;
+            default -> ORDER_LATEST;
+        };
+        String full = SELECT_CLAUSE + where + " GROUP BY p.id ORDER BY " + order
+                + " LIMIT :limit OFFSET :offset";
+        var q = em.createNativeQuery(full);
+        q.setParameter("limit", size);
+        q.setParameter("offset", offset);
+        if (cityId != null) {
+            q.setParameter("cityId", cityId);
+        }
+        if (spotId != null) {
+            q.setParameter("spotId", spotId);
+        }
+        return mapStats(q.getResultList());
+    }
+
+    @Override
+    public long countPublishedByLocation(String cityId, String spotId) {
+        String where = "WHERE p.status = 'PUBLISHED' AND p.deleted = false"
+                + (cityId != null ? " AND p.city_id = :cityId" : "")
+                + (spotId != null ? " AND JSON_CONTAINS(p.spot_ids, JSON_QUOTE(:spotId))" : "");
+        var q = em.createNativeQuery("SELECT COUNT(DISTINCT p.id) FROM posts p " + where);
+        if (cityId != null) {
+            q.setParameter("cityId", cityId);
+        }
+        if (spotId != null) {
+            q.setParameter("spotId", spotId);
+        }
+        return ((Number) q.getSingleResult()).longValue();
+    }
+
     private String cursorPredicate() {
         return " AND (p.created_at < :curTs OR (p.created_at = :curTs AND p.id < :curId))";
     }

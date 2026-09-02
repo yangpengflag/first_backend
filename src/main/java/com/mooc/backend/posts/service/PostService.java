@@ -63,7 +63,8 @@ public class PostService {
         PostStatus status = request.status() == null ? PostStatus.DRAFT : request.status();
         List<String> tags = normalizeTags(request.tags());
         Post post = Post.create(authorId, request.title(), request.content(),
-                request.coverImageUrl(), tags, status, now);
+                request.coverImageUrl(), tags, status,
+                trimToNull(request.cityId()), normalizeSpotIds(request.spotIds()), now);
         Post saved = postRepository.save(post);
         AuthorView author = resolveAuthor(authorId);
         return PostResponse.from(saved, author.name(), author.avatarUrl(),
@@ -95,6 +96,21 @@ public class PostService {
         return PostListResponse.offset(items, safePage, safeSize, total);
     }
 
+    /** 公开列表按地点过滤（仅 PUBLISHED）：cityId 精确匹配，spotId 命中 spot_ids 数组；offset 分页。 */
+    public PostListResponse listByLocation(String sortParam, Integer page, Integer size,
+                                           String cityId, String spotId, Instant now) {
+        int safeSize = clampSize(size);
+        PostSort sort = PostSort.from(sortParam);
+        int safePage = (page == null || page < 1) ? 1 : page;
+        int offset = (safePage - 1) * safeSize;
+        List<PostStatsView> stats = postRepository.findPublishedByLocation(sort, safeSize, offset,
+                trimToNull(cityId), trimToNull(spotId));
+        long total = postRepository.countPublishedByLocation(trimToNull(cityId), trimToNull(spotId));
+        Map<UUID, Post> byId = fetchPosts(stats);
+        List<PostSummary> items = toSummaries(stats, byId);
+        return PostListResponse.offset(items, safePage, safeSize, total);
+    }
+
     /** 公开详情：非 PUBLISHED 或已软删（查询层 AndDeletedFalse 过滤）一律 404。 */
     public PostResponse getPublished(UUID id, Instant now) {
         Post post = postRepository.findByIdAndDeletedFalse(id)
@@ -119,7 +135,8 @@ public class PostService {
         String cover = request.coverImageUrl() != null ? request.coverImageUrl() : post.getCoverImageUrl();
         List<String> tags = request.tags() != null ? normalizeTags(request.tags()) : post.getTags();
         PostStatus status = request.status() != null ? request.status() : post.getStatus();
-        post.update(title, content, cover, tags, status, now);
+        List<String> spotIds = request.spotIds() != null ? normalizeSpotIds(request.spotIds()) : post.getSpotIds();
+        post.update(title, content, cover, tags, status, trimToNull(request.cityId()), spotIds, now);
         Post saved = postRepository.save(post);
         AuthorView author = resolveAuthor(saved.getAuthorId());
         return PostResponse.from(saved, author.name(), author.avatarUrl(),
@@ -226,6 +243,29 @@ public class PostService {
                 .filter(t -> !t.isEmpty())
                 .distinct()
                 .limit(10)
+                .toList();
+    }
+
+    /** 地点城市 slug 归一化：trim 后空串转 null（null 在 update 时保留原值）。 */
+    private String trimToNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    /** 地点 POI slug 列表归一化：trim + 小写 + 去空 + 去重 + 上限 20。 */
+    private List<String> normalizeSpotIds(List<String> spotIds) {
+        if (spotIds == null || spotIds.isEmpty()) {
+            return List.of();
+        }
+        return spotIds.stream()
+                .filter(Objects::nonNull)
+                .map(t -> t.trim().toLowerCase(Locale.ROOT))
+                .filter(t -> !t.isEmpty())
+                .distinct()
+                .limit(20)
                 .toList();
     }
 

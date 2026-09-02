@@ -43,7 +43,7 @@ class PostResponseSerializationTest {
     @Test
     void serializedKeysExactlyMatchWhitelist() throws Exception {
         Post post = Post.create(UUID.randomUUID(), "T", "c", null,
-                List.of("a"), PostStatus.PUBLISHED, NOW);
+                List.of("a"), PostStatus.PUBLISHED, null, List.of(), NOW);
         String json = mapper.writeValueAsString(PostResponse.from(post, "Alice", "http://a", "summary"));
 
         Set<String> names = new HashSet<>();
@@ -56,7 +56,7 @@ class PostResponseSerializationTest {
     @Test
     void neverLeaksSensitiveFields() throws Exception {
         Post post = Post.create(UUID.randomUUID(), "T", "c", null,
-                List.of(), PostStatus.PUBLISHED, NOW);
+                List.of(), PostStatus.PUBLISHED, null, List.of(), NOW);
         String json = mapper.writeValueAsString(PostResponse.from(post, "Alice", null, "summary"));
 
         assertThat(json).doesNotContain("deleted").doesNotContain("deleted_at").doesNotContain("deletedAt").doesNotContain("\"email\"");

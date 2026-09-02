@@ -19,6 +19,10 @@ public record UpdatePostRequest(
         @Pattern(regexp = "^(https?://.+)?$", message = "coverImageUrl must be a valid http(s) URL")
         String coverImageUrl,
         @Size(max = 10) List<@Size(max = 30) String> tags,
-        PostStatus status
+        PostStatus status,
+        /** 单城市语境地点关联（city slug），可选；补丁式，null 保留原值。 */
+        String cityId,
+        /** 多 POI 关联（Spot slug 数组），可选；补丁式，null 保留原值。 */
+        @Size(max = 20) List<@Size(max = 80) String> spotIds
 ) {
 }

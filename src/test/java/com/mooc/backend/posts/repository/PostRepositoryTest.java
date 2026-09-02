@@ -55,7 +55,7 @@ class PostRepositoryTest {
 
     @Test
     void softDeletedPostExcludedFromQueries() {
-        Post post = Post.create(UUID.randomUUID(), "T", "c", null, List.of(), PostStatus.PUBLISHED, Instant.now());
+        Post post = Post.create(UUID.randomUUID(), "T", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), Instant.now());
         Post saved = postRepository.saveAndFlush(post);
 
         entityManager.createNativeQuery("UPDATE posts SET deleted = true WHERE id = ?1")
@@ -71,7 +71,7 @@ class PostRepositoryTest {
     @Test
     void tagsPersistedAndLoaded() {
         Post post = Post.create(UUID.randomUUID(), "T", "c", null,
-                List.of("Hiking", "Sichuan"), PostStatus.DRAFT, Instant.now());
+                List.of("Hiking", "Sichuan"), PostStatus.DRAFT, null, List.of(), Instant.now());
         Post saved = postRepository.saveAndFlush(post);
         entityManager.clear();
 
@@ -130,6 +130,36 @@ class PostRepositoryTest {
         assertThat(page.get(0).bookmarkCount()).isEqualTo(1);
     }
 
+    /** 地点过滤：cityId 精确匹配、spotId 命中 spot_ids 数组（JSON_CONTAINS），且忽略草稿与无地点帖。 */
+    @Test
+    void locationFilterMatchesCityAndSpot() {
+        UUID author = UUID.randomUUID();
+        Post hangzhouPost = postRepository.saveAndFlush(
+                Post.create(author, "HZ Post", "c", null, List.of(), PostStatus.PUBLISHED,
+                        "hangzhou", List.of("hangzhou-west-lake", "lingyin"), Instant.now()));
+        postRepository.saveAndFlush(
+                Post.create(author, "Other", "c", null, List.of(), PostStatus.PUBLISHED,
+                        "chengdu", List.of(), Instant.now()));
+        postRepository.saveAndFlush(
+                Post.create(author, "None", "c", null, List.of(), PostStatus.PUBLISHED,
+                        null, List.of(), Instant.now()));
+        postRepository.saveAndFlush(
+                Post.create(author, "Draft", "c", null, List.of(), PostStatus.DRAFT,
+                        null, List.of("hangzhou-west-lake"), Instant.now()));
+        entityManager.clear();
+
+        List<PostStatsView> byCity = postRepository.findPublishedByLocation(PostSort.LATEST, 10, 0, "hangzhou", null);
+        assertThat(byCity).extracting(PostStatsView::postId).containsExactly(hangzhouPost.getId());
+
+        List<PostStatsView> bySpot = postRepository.findPublishedByLocation(PostSort.LATEST, 10, 0, null, "hangzhou-west-lake");
+        assertThat(bySpot).extracting(PostStatsView::postId).containsExactly(hangzhouPost.getId());
+
+        assertThat(postRepository.countPublishedByLocation("hangzhou", null)).isEqualTo(1);
+        assertThat(postRepository.countPublishedByLocation(null, "hangzhou-west-lake")).isEqualTo(1);
+        assertThat(postRepository.countPublishedByLocation("chengdu", null)).isEqualTo(1);
+        assertThat(postRepository.countPublishedByLocation(null, "lingyin")).isEqualTo(1);
+    }
+
     /**
      * 构建 2 个 PUBLISHED 帖 + 1 个 DRAFT 帖 + 1 个已软删 PUBLISHED 帖，并挂上用于验证计数口径的
      * 评论 / 投票 / 收藏（含已软删与 DOWN 票）。返回两个 PUBLISHED 帖的 id 与 B 的创建时间（游标用）。
@@ -142,13 +172,13 @@ class PostRepositoryTest {
         UUID user3 = UUID.randomUUID();
 
         Post postA = postRepository.saveAndFlush(
-                Post.create(author, "A", "c", null, List.of(), PostStatus.PUBLISHED, base.minus(Duration.ofHours(2))));
+                Post.create(author, "A", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base.minus(Duration.ofHours(2))));
         Post postB = postRepository.saveAndFlush(
-                Post.create(author, "B", "c", null, List.of(), PostStatus.PUBLISHED, base.minus(Duration.ofHours(1))));
+                Post.create(author, "B", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base.minus(Duration.ofHours(1))));
         postRepository.saveAndFlush(
-                Post.create(author, "C", "c", null, List.of(), PostStatus.DRAFT, base.minus(Duration.ofHours(3))));
+                Post.create(author, "C", "c", null, List.of(), PostStatus.DRAFT, null, List.of(), base.minus(Duration.ofHours(3))));
         Post postD = postRepository.saveAndFlush(
-                Post.create(author, "D", "c", null, List.of(), PostStatus.PUBLISHED, base));
+                Post.create(author, "D", "c", null, List.of(), PostStatus.PUBLISHED, null, List.of(), base));
         postD.softDelete(base);
         postRepository.saveAndFlush(postD);
 

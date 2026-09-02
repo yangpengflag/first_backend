@@ -33,10 +33,13 @@ public class PostSummary extends BaseResponse {
     @JsonProperty("comment_count") private final long commentCount;
     @JsonProperty("up_vote_count") private final long upVoteCount;
     @JsonProperty("bookmark_count") private final long bookmarkCount;
+    @JsonProperty("city_id") private final String cityId;
+    @JsonProperty("spot_ids") private final List<String> spotIds;
 
     public PostSummary(UUID id, String title, String coverImageUrl, List<String> tags, String status,
                        UUID authorId, String authorName, String authorAvatarUrl, String summary,
-                       Instant createdAt, long commentCount, long upVoteCount, long bookmarkCount) {
+                       Instant createdAt, long commentCount, long upVoteCount, long bookmarkCount,
+                       String cityId, List<String> spotIds) {
         super();
         this.id = id;
         this.title = title;
@@ -51,14 +54,16 @@ public class PostSummary extends BaseResponse {
         this.commentCount = commentCount;
         this.upVoteCount = upVoteCount;
         this.bookmarkCount = bookmarkCount;
+        this.cityId = cityId;
+        this.spotIds = spotIds == null ? List.of() : spotIds;
     }
 
     public static final Set<String> WHITELISTED_FIELDS = Set.of(
             "id", "title", "cover_image_url", "tags", "status",
             "author_id", "author_name", "author_avatar_url", "summary", "created_at",
-            "comment_count", "up_vote_count", "bookmark_count", "request_id");
+            "comment_count", "up_vote_count", "bookmark_count", "city_id", "spot_ids", "request_id");
 
-    /** 列表专用：携带三项实时计数。 */
+    /** 列表专用：携带三项实时计数与地点关联。 */
     public static PostSummary from(Post post, String authorName, String authorAvatarUrl, String summary,
                                    long commentCount, long upVoteCount, long bookmarkCount) {
         return new PostSummary(
@@ -74,10 +79,12 @@ public class PostSummary extends BaseResponse {
                 post.getCreatedAt(),
                 commentCount,
                 upVoteCount,
-                bookmarkCount);
+                bookmarkCount,
+                post.getCityId(),
+                post.getSpotIds());
     }
 
-    /** 详情 / 创建 / 编辑等端点复用：计数为 0（互动数不在此处提供）。 */
+    /** 详情 / 创建 / 编辑等端点复用：计数为 0（互动数不在此处提供），仍携带地点关联。 */
     public static PostSummary from(Post post, String authorName, String authorAvatarUrl, String summary) {
         return from(post, authorName, authorAvatarUrl, summary, 0L, 0L, 0L);
     }
@@ -95,4 +102,6 @@ public class PostSummary extends BaseResponse {
     public long getCommentCount() { return commentCount; }
     public long getUpVoteCount() { return upVoteCount; }
     public long getBookmarkCount() { return bookmarkCount; }
+    public String getCityId() { return cityId; }
+    public List<String> getSpotIds() { return spotIds; }
 }

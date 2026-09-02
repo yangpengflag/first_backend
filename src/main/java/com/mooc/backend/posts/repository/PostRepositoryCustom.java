@@ -22,4 +22,11 @@ public interface PostRepositoryCustom {
     /** 我的帖子聚合（含 DRAFT）。cursor 模式 useCursor=true 时忽略 offset。 */
     List<PostStatsView> findMyStats(UUID authorId, PostSort sort, int size, int offset,
                                     Instant cursorTs, UUID cursorId, boolean useCursor);
+
+    /** 按地点过滤的公开列表聚合（仅 PUBLISHED）：cityId 精确匹配，spotId 命中 spot_ids 数组（JSON_CONTAINS）。offset 分页。 */
+    List<PostStatsView> findPublishedByLocation(PostSort sort, int size, int offset,
+                                                String cityId, String spotId);
+
+    /** 按地点过滤的 PUBLISHED 总数（offset 分页 total 用）。 */
+    long countPublishedByLocation(String cityId, String spotId);
 }

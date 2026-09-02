@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -26,7 +27,9 @@ import java.util.UUID;
  * <p>{@code summary} 不存储，读取时由 {@code MarkdownSummary} 从 {@code content} 派生。
  */
 @Entity
-@Table(name = "posts")
+@Table(name = "posts", indexes = {
+        @Index(name = "idx_posts_city_id", columnList = "city_id")
+})
 public class Post extends BaseEntity {
 
     @Column(name = "author_id", nullable = false)
@@ -49,12 +52,22 @@ public class Post extends BaseEntity {
     @Column(name = "tags", nullable = false)
     private List<String> tags = new ArrayList<>();
 
+    /** 单城市语境地点关联（存 city slug，可选）。 */
+    @Column(name = "city_id")
+    private String cityId;
+
+    /** 多 POI 关联（存 Spot slug 数组，可选，缺省空数组）。 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "spot_ids", nullable = false)
+    private List<String> spotIds = new ArrayList<>();
+
     protected Post() {
         // JPA only
     }
 
     private Post(UUID id, UUID authorId, String title, String content,
-                 String coverImageUrl, List<String> tags, PostStatus status, Instant now) {
+                 String coverImageUrl, List<String> tags, PostStatus status,
+                 String cityId, List<String> spotIds, Instant now) {
         super(id, now);
         this.authorId = authorId;
         this.title = title;
@@ -62,23 +75,34 @@ public class Post extends BaseEntity {
         this.coverImageUrl = coverImageUrl;
         this.tags = new ArrayList<>(tags);
         this.status = status;
+        this.cityId = cityId;
+        this.spotIds = spotIds == null ? new ArrayList<>() : new ArrayList<>(spotIds);
     }
 
     /** 创建新帖子，主键与时间由调用方注入（与 BaseEntity / User 约定一致）。 */
     public static Post create(UUID authorId, String title, String content,
-                              String coverImageUrl, List<String> tags, PostStatus status, Instant now) {
-        return new Post(UUID.randomUUID(), authorId, title, content, coverImageUrl, tags, status, now);
+                              String coverImageUrl, List<String> tags, PostStatus status,
+                              String cityId, List<String> spotIds, Instant now) {
+        return new Post(UUID.randomUUID(), authorId, title, content, coverImageUrl, tags, status,
+                cityId, spotIds, now);
     }
 
-    /** 局部更新：仅替换调用方提供的非空字段，并刷新更新时间。 */
+    /** 局部更新：仅替换调用方提供的非空字段，并刷新更新时间。地点字段为 null 时保留原值。 */
     public void update(String title, String content, String coverImageUrl,
-                       List<String> tags, PostStatus status, Instant now) {
+                       List<String> tags, PostStatus status, String cityId, List<String> spotIds,
+                       Instant now) {
         this.title = title;
         this.content = content;
         this.coverImageUrl = coverImageUrl;
         this.tags.clear();
         this.tags.addAll(tags);
         this.status = status;
+        if (cityId != null) {
+            this.cityId = cityId;
+        }
+        if (spotIds != null) {
+            this.spotIds = new ArrayList<>(spotIds);
+        }
         this.touch(now);
     }
 
@@ -110,6 +134,14 @@ public class Post extends BaseEntity {
 
     public List<String> getTags() {
         return List.copyOf(tags);
+    }
+
+    public String getCityId() {
+        return cityId;
+    }
+
+    public List<String> getSpotIds() {
+        return List.copyOf(spotIds);
     }
 
     public boolean isPublished() {

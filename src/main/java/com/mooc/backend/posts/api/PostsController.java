@@ -61,7 +61,12 @@ public class PostsController {
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "1") int page,
-            @RequestParam(required = false, defaultValue = "20") int size) {
+            @RequestParam(required = false, defaultValue = "20") int size,
+            @RequestParam(required = false) String cityId,
+            @RequestParam(required = false) String spotId) {
+        if (cityId != null || spotId != null) {
+            return ResponseEntity.ok(postService.listByLocation(sort, page, size, cityId, spotId, Instant.now()));
+        }
         return ResponseEntity.ok(postService.listPublished(sort, cursor, page, size, Instant.now()));
     }
 
