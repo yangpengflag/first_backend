@@ -1,0 +1,11 @@
+# prod profile 专属配置（change: openapi-integration，task 2）。
+#
+# 文档端点必须关闭：Swagger UI 与 /v3/api-docs 一旦暴露在生产，
+# 等于把端点清单与请求样例直接摊开给攻击者。禁用后两路径均返回 404
+# （而非 401/403——后者仍会暴露"该路径存在"这一事实）。
+# 由 OpenApiProdProfileTest 守护。
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
