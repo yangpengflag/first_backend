@@ -1,5 +1,6 @@
 package com.mooc.backend.comments.service;
 
+import com.mooc.backend.auth.domain.Role;
 import com.mooc.backend.auth.domain.User;
 import com.mooc.backend.auth.domain.UserRepository;
 import com.mooc.backend.auth.domain.UserStatus;
@@ -141,6 +142,20 @@ class CommentServiceTest {
                 .isInstanceOf(CommentException.class);
 
         assertThat(comment.isDeleted()).isFalse();
+    }
+
+    @Test
+    void deleteByAdminSucceedsEvenIfNotAuthor() {
+        Comment comment = Comment.create(POST, OTHER, "c", null, NOW);
+        when(commentRepository.findByIdAndDeletedFalse(comment.getId())).thenReturn(Optional.of(comment));
+        when(commentRepository.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+        User admin = mock(User.class);
+        when(admin.getRole()).thenReturn(Role.ADMIN);
+        when(userRepository.findById(USER)).thenReturn(Optional.of(admin));
+
+        commentService.delete(comment.getId(), USER, NOW);
+
+        assertThat(comment.isDeleted()).isTrue();
     }
 
     @Test

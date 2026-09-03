@@ -52,6 +52,14 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 32)
     private UserStatus status;
 
+    /**
+     * 角色：{@code USER} 普通用户、{@code ADMIN} 管理员（可删除任意评论）。
+     * 默认 {@code USER}；仅由受信任的管理通道（如 DB 直更）提升，注册流程不暴露。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private Role role = Role.USER;
+
     /** 一次性邮箱验证码（UUID v4）。禁止出网。 */
     @Column(name = "verification_code")
     private String verificationCode;
@@ -91,6 +99,7 @@ public class User extends BaseEntity {
         this.displayName = displayName;
         this.avatarUrl = null;
         this.status = UserStatus.EMAIL_UNVERIFIED;
+        this.role = Role.USER;
         this.failedAttempts = 0;
     }
 
@@ -284,6 +293,14 @@ public class User extends BaseEntity {
 
     public UserStatus getStatus() {
         return status;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
     }
 
     public String getVerificationCode() {

@@ -101,6 +101,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/spots").permitAll()
                         // 景点收藏状态查询需鉴权：精确路径须排在下方 GET /api/spots/* 公开读通配之前
                         .requestMatchers(HttpMethod.GET, "/api/spots/*/bookmark").authenticated()
+                        // 景点评论读写均需鉴权（与帖子评论一致）：顶层评论列表精确路径须排在下方通配之前；
+                        // 回复端点 /api/spot-comments/* 不匹配 /api/spots/*, 由 anyRequest().authenticated() 兜底
+                        .requestMatchers(HttpMethod.GET, "/api/spots/*/comments").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/spots/*").permitAll()
                         .anyRequest().authenticated()
                 )

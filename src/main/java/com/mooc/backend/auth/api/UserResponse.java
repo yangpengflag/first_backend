@@ -27,22 +27,24 @@ public class UserResponse extends BaseResponse {
     @JsonProperty("display_name") private final String displayName;
     @JsonProperty("avatar_url") private final String avatarUrl;
     @JsonProperty("status") private final String status;
+    @JsonProperty("role") private final String role;
     @JsonProperty("created_at") private final Instant createdAt;
 
     public UserResponse(UUID id, String email, String displayName, String avatarUrl,
-                        String status, Instant createdAt) {
+                        String status, String role, Instant createdAt) {
         super();
         this.id = id;
         this.email = email;
         this.displayName = displayName;
         this.avatarUrl = avatarUrl;
         this.status = status;
+        this.role = role;
         this.createdAt = createdAt;
     }
 
     /** 白名单字段集合，供测试断言序列化输出严格等于此集合（含 request_id）。 */
     public static final Set<String> WHITELISTED_FIELDS = Set.of(
-            "id", "email", "display_name", "avatar_url", "status", "created_at", "request_id");
+            "id", "email", "display_name", "avatar_url", "status", "role", "created_at", "request_id");
 
     public static UserResponse from(User user) {
         if (user == null) {
@@ -54,6 +56,7 @@ public class UserResponse extends BaseResponse {
                 user.getDisplayName(),
                 user.getAvatarUrl(),
                 user.getStatus() == null ? null : user.getStatus().name(),
+                user.getRole() == null ? null : user.getRole().name(),
                 user.getCreatedAt());
     }
 
@@ -62,5 +65,6 @@ public class UserResponse extends BaseResponse {
     public String getDisplayName() { return displayName; }
     public String getAvatarUrl() { return avatarUrl; }
     public String getStatus() { return status; }
+    public String getRole() { return role; }
     public Instant getCreatedAt() { return createdAt; }
 }

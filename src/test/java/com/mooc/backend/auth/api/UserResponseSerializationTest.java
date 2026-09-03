@@ -94,6 +94,7 @@ class UserResponseSerializationTest {
         assertThat(response.getEmail()).isEqualTo("alice@example.com");
         assertThat(response.getDisplayName()).isEqualTo("Alice");
         assertThat(response.getStatus()).isEqualTo(UserStatusHolder.EMAIL_UNVERIFIED_NAME);
+        assertThat(response.getRole()).isEqualTo("USER");
         assertThat(response.getCreatedAt()).isEqualTo(NOW);
     }
 

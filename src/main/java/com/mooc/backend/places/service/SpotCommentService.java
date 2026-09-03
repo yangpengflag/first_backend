@@ -1,23 +1,24 @@
-package com.mooc.backend.comments.service;
+package com.mooc.backend.places.service;
 
 import com.mooc.backend.auth.domain.Role;
 import com.mooc.backend.auth.domain.User;
 import com.mooc.backend.auth.domain.UserRepository;
 import com.mooc.backend.auth.domain.UserStatus;
-import com.mooc.backend.comments.api.CommentResponse;
 import com.mooc.backend.comments.api.CreateCommentRequest;
-import com.mooc.backend.comments.domain.Comment;
 import com.mooc.backend.comments.exception.CommentException;
 import com.mooc.backend.auth.exception.ErrorCode;
-import com.mooc.backend.comments.repository.CommentRepository;
-import com.mooc.backend.posts.repository.PostRepository;
+import com.mooc.backend.places.api.SpotCommentResponse;
+import com.mooc.backend.places.domain.Spot;
+import com.mooc.backend.places.domain.SpotComment;
+import com.mooc.backend.places.repository.SpotCommentRepository;
+import com.mooc.backend.places.repository.SpotRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -29,66 +30,67 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * 评论业务逻辑。
+ * 景点评论业务逻辑（镜像 comments.CommentService，postId → spotSlug）。
  *
- * <p>两层模型：顶层评论（parentCommentId = null）+ 其回复。回复的父评论必须指向同帖的
+ * <p>两层模型：顶层评论（parentCommentId = null）+ 其回复。回复的父评论必须指向同景点的
  * 顶层评论（否则 {@code INVALID_PARENT_COMMENT}）。作者展示信息批量 IN 解析
  * （{@code UserRepository.findAllById}），缺失 / 已软删回退占位，避免 N+1 与隐私泄露。
+ * 景点不存在统一抛 {@code SPOT_NOT_FOUND}；评论相关错误复用 {@code CommentException} 与既有错误码。
  */
 @Service
-public class CommentService {
+public class SpotCommentService {
 
-    private static final Logger log = LoggerFactory.getLogger(CommentService.class);
+    private static final Logger log = LoggerFactory.getLogger(SpotCommentService.class);
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 50;
 
-    private final CommentRepository commentRepository;
-    private final PostRepository postRepository;
+    private final SpotCommentRepository spotCommentRepository;
+    private final SpotRepository spotRepository;
     private final UserRepository userRepository;
 
-    public CommentService(CommentRepository commentRepository, PostRepository postRepository,
-                          UserRepository userRepository) {
-        this.commentRepository = commentRepository;
-        this.postRepository = postRepository;
+    public SpotCommentService(SpotCommentRepository spotCommentRepository, SpotRepository spotRepository,
+                              UserRepository userRepository) {
+        this.spotCommentRepository = spotCommentRepository;
+        this.spotRepository = spotRepository;
         this.userRepository = userRepository;
     }
 
-    /** 发布评论：顶层或回复；校验帖存在、回复父评论同帖且为顶层评论。 */
-    public CommentResponse create(UUID postId, UUID userId, CreateCommentRequest request, Instant now) {
-        if (postRepository.findByIdAndDeletedFalse(postId).isEmpty()) {
-            throw new CommentException(ErrorCode.POST_NOT_FOUND);
+    /** 发布评论：顶层或回复；校验景点存在、回复父评论同景点且为顶层评论。 */
+    public SpotCommentResponse create(String spotSlug, UUID userId, CreateCommentRequest request, Instant now) {
+        if (spotRepository.findBySlugAndDeletedFalse(spotSlug).isEmpty()) {
+            throw new CommentException(ErrorCode.SPOT_NOT_FOUND);
         }
         UUID parentId = request.parentCommentId();
         if (parentId != null) {
-            Comment parent = commentRepository.findByPostIdAndIdAndDeletedFalse(postId, parentId)
+            SpotComment parent = spotCommentRepository.findBySpotSlugAndIdAndDeletedFalse(spotSlug, parentId)
                     .orElseThrow(() -> new CommentException(ErrorCode.INVALID_PARENT_COMMENT));
             if (!parent.isTopLevel()) {
                 throw new CommentException(ErrorCode.INVALID_PARENT_COMMENT);
             }
         }
-        Comment comment = Comment.create(postId, userId, request.content(), parentId, now);
-        Comment saved = commentRepository.save(comment);
+        SpotComment comment = SpotComment.create(spotSlug, userId, request.content(), parentId, now);
+        SpotComment saved = spotCommentRepository.save(comment);
         AuthorView author = resolveAuthor(userId);
-        return CommentResponse.from(saved, author.name(), author.avatarUrl(), 0L);
+        return SpotCommentResponse.from(saved, author.name(), author.avatarUrl(), 0L);
     }
 
-    /** 顶层评论分页（倒序），含 reply_count 与作者信息。帖不存在 → POST_NOT_FOUND。 */
-    public Page<CommentResponse> listTopLevel(UUID postId, int page, int size, Instant now) {
-        if (postRepository.findByIdAndDeletedFalse(postId).isEmpty()) {
-            throw new CommentException(ErrorCode.POST_NOT_FOUND);
+    /** 顶层评论分页（倒序），含 reply_count 与作者信息。景点不存在 → SPOT_NOT_FOUND。 */
+    public Page<SpotCommentResponse> listTopLevel(String spotSlug, int page, int size, Instant now) {
+        if (spotRepository.findBySlugAndDeletedFalse(spotSlug).isEmpty()) {
+            throw new CommentException(ErrorCode.SPOT_NOT_FOUND);
         }
         Pageable pageable = buildPageable(page, clampSize(size), Sort.Direction.DESC);
-        Page<Comment> commentPage = commentRepository.findByPostIdAndParentCommentIdIsNullAndDeletedFalse(postId, pageable);
+        Page<SpotComment> commentPage = spotCommentRepository.findBySpotSlugAndParentCommentIdIsNullAndDeletedFalse(spotSlug, pageable);
         return toResponsePage(commentPage, pageable);
     }
 
     /** 回复分页（升序）。父评论不存在或已删 → COMMENT_NOT_FOUND。 */
-    public Page<CommentResponse> listReplies(UUID commentId, int page, int size, Instant now) {
-        if (commentRepository.findByIdAndDeletedFalse(commentId).isEmpty()) {
+    public Page<SpotCommentResponse> listReplies(UUID commentId, int page, int size, Instant now) {
+        if (spotCommentRepository.findByIdAndDeletedFalse(commentId).isEmpty()) {
             throw new CommentException(ErrorCode.COMMENT_NOT_FOUND);
         }
         Pageable pageable = buildPageable(page, clampSize(size), Sort.Direction.ASC);
-        Page<Comment> replyPage = commentRepository.findByParentCommentIdAndDeletedFalse(commentId, pageable);
+        Page<SpotComment> replyPage = spotCommentRepository.findByParentCommentIdAndDeletedFalse(commentId, pageable);
         return toResponsePage(replyPage, pageable);
     }
 
@@ -97,7 +99,7 @@ public class CommentService {
      * 删除顶层评论时级联软删其全部回复（避免孤儿）；删除回复（叶子）不级联。
      */
     public void delete(UUID commentId, UUID userId, Instant now) {
-        Comment comment = commentRepository.findByIdAndDeletedFalse(commentId)
+        SpotComment comment = spotCommentRepository.findByIdAndDeletedFalse(commentId)
                 .orElseThrow(() -> new CommentException(ErrorCode.COMMENT_NOT_FOUND));
         // 作者本人或管理员（ADMIN）可删；其余非作者 → NOT_COMMENT_AUTHOR。
         boolean isAdmin = userRepository.findById(userId)
@@ -107,26 +109,26 @@ public class CommentService {
             throw new CommentException(ErrorCode.NOT_COMMENT_AUTHOR);
         }
         if (comment.isTopLevel()) {
-            List<Comment> replies = commentRepository.findAllByParentCommentIdAndDeletedFalse(commentId);
-            for (Comment reply : replies) {
+            List<SpotComment> replies = spotCommentRepository.findAllByParentCommentIdAndDeletedFalse(commentId);
+            for (SpotComment reply : replies) {
                 reply.softDelete(now);
             }
-            commentRepository.saveAll(replies);
+            spotCommentRepository.saveAll(replies);
         }
         comment.softDelete(now);
-        commentRepository.save(comment);
+        spotCommentRepository.save(comment);
     }
 
     // ---------- 内部辅助 ----------
 
-    private Page<CommentResponse> toResponsePage(Page<Comment> commentPage, Pageable pageable) {
-        List<UUID> authorIds = commentPage.getContent().stream().map(Comment::getUserId).distinct().toList();
+    private Page<SpotCommentResponse> toResponsePage(Page<SpotComment> commentPage, Pageable pageable) {
+        List<UUID> authorIds = commentPage.getContent().stream().map(SpotComment::getUserId).distinct().toList();
         Map<UUID, AuthorView> authors = resolveAuthors(authorIds);
-        List<CommentResponse> items = commentPage.getContent().stream()
-                .map(c -> CommentResponse.from(c,
+        List<SpotCommentResponse> items = commentPage.getContent().stream()
+                .map(c -> SpotCommentResponse.from(c,
                         authors.getOrDefault(c.getUserId(), AuthorView.UNKNOWN).name(),
                         authors.getOrDefault(c.getUserId(), AuthorView.UNKNOWN).avatarUrl(),
-                        commentRepository.countByParentCommentIdAndDeletedFalse(c.getId())))
+                        spotCommentRepository.countByParentCommentIdAndDeletedFalse(c.getId())))
                 .toList();
         return new PageImpl<>(items, pageable, commentPage.getTotalElements());
     }

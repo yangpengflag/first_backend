@@ -74,7 +74,7 @@ public class CommentsController {
         return ResponseEntity.ok(commentService.listReplies(commentId, page, size, Instant.now()));
     }
 
-    @Operation(summary = "删除评论（软删除）", description = "需鉴权且须为作者本人；顶层评论级联软删其回复。")
+    @Operation(summary = "删除评论（软删除）", description = "需鉴权；作者本人或 ADMIN 可删；顶层评论级联软删其回复。")
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> delete(@PathVariable UUID commentId) {
         UUID userId = currentUserId();

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.time.Instant;
 
+import com.mooc.backend.auth.domain.Role;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class UserTest {
@@ -36,6 +38,7 @@ class UserTest {
         User user = newUser("alice@example.com");
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.EMAIL_UNVERIFIED);
+        assertThat(user.getRole()).isEqualTo(Role.USER);
         assertThat(user.getFailedAttempts()).isZero();
         assertThat(user.isDeleted()).isFalse();
         assertThat(user.getLockedUntil()).isNull();
