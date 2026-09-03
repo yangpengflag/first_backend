@@ -14,6 +14,16 @@ spring:
     open-in-view: false
     show-sql: false
 
+  data:
+    redis:
+      # 景点排行榜缓存（change: add-spot-ranking-redis-cache）。本地默认 localhost:6379，
+      # 生产用环境变量 REDIS_HOST / REDIS_PORT 覆盖；timeout/connect-timeout 收敛到亚秒级，
+      # 保证 Redis 宕机时 fail-safe 直查数据库的最坏等待可控（Lettuce 默认命令超时长达 60s）。
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+      connect-timeout: 500ms
+
   # 真实 SMTP（生产必配，本地可选）：仅通过环境变量启用，本文件不写 mail 段。
   # 未设置 SPRING_MAIL_HOST 时不装配 JavaMailSender，SmtpMailSender 不生效，
   # 自动回退 LoggingMailSender（仅日志，无需凭据）——测试与默认本地开发均走此路径。
@@ -36,6 +46,10 @@ app:
       - http://localhost:3000
   # 前端站点地址，用于拼接邮件中的验证 / 重置链接
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+  # 景点排行榜 Redis 缓存开关（默认开）。surefire 测试经系统属性 app.ranking-cache.enabled=false 关闭；
+  # 生产可用此键作热停（kill switch）开关，不必回滚代码。
+  ranking-cache:
+    enabled: true
 
 auth:
   jwt:

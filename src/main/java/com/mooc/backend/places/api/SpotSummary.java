@@ -1,5 +1,6 @@
 package com.mooc.backend.places.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.mooc.backend.dto.response.BaseResponse;
@@ -43,11 +44,27 @@ public class SpotSummary extends BaseResponse {
     @JsonProperty("featured") private final boolean featured;
     @JsonProperty("hidden_gem") private final boolean hiddenGem;
 
-    SpotSummary(String slug, String nameZh, String nameEn, String citySlug, String category, String status,
-                List<String> tags, String level, String addressEn, String addressZh, Double lat, Double lng,
-                String coverImageUrl, List<String> galleryUrls, String summaryEn, String summaryZh,
-                String openingHours, String ticketInfo, String visitDuration, long viewCount,
-                long postCount, Double rating, boolean featured, boolean hiddenGem) {
+    /**
+     * 唯一构造器兼作 Jackson 反序列化入口（Redis 缓存回读，change: add-spot-ranking-redis-cache）。
+     *
+     * <p>出网序列化仍走字段 {@code @JsonProperty}（snake_case）+ getter，此构造器注解只补充回读能力，
+     * 不影响 HTTP 输出。{@code request_id} 非构造器入参：反序列化时经 {@code super()}（BaseResponse）
+     * 按当前线程 MDC 重建，保证缓存命中的关联 ID 语义与回源一致。
+     */
+    @JsonCreator
+    SpotSummary(@JsonProperty("slug") String slug, @JsonProperty("name_zh") String nameZh,
+                @JsonProperty("name_en") String nameEn, @JsonProperty("city_slug") String citySlug,
+                @JsonProperty("category") String category, @JsonProperty("status") String status,
+                @JsonProperty("tags") List<String> tags, @JsonProperty("level") String level,
+                @JsonProperty("address_en") String addressEn, @JsonProperty("address_zh") String addressZh,
+                @JsonProperty("lat") Double lat, @JsonProperty("lng") Double lng,
+                @JsonProperty("cover_image_url") String coverImageUrl,
+                @JsonProperty("gallery_urls") List<String> galleryUrls,
+                @JsonProperty("summary_en") String summaryEn, @JsonProperty("summary_zh") String summaryZh,
+                @JsonProperty("opening_hours") String openingHours, @JsonProperty("ticket_info") String ticketInfo,
+                @JsonProperty("visit_duration") String visitDuration, @JsonProperty("view_count") long viewCount,
+                @JsonProperty("post_count") long postCount, @JsonProperty("rating") Double rating,
+                @JsonProperty("featured") boolean featured, @JsonProperty("hidden_gem") boolean hiddenGem) {
         super();
         this.slug = slug;
         this.nameZh = nameZh;

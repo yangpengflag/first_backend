@@ -23,7 +23,7 @@ public interface SpotRepositoryCustom {
     /**
      * 排行榜查询：仅 PUBLISHED 且未软删。
      *
-     * @param type   rating（无评分沉底）/ popular（view_count 降序）/ bookmarks（实时聚合收藏数降序）
+     * @param type   rating（无评分沉底）/ popular（view_count 降序）/ bookmarks（按收藏数降序；端点响应经缓存近实时 ≤5 分钟窗口）
      * @param pageable 仅用 {@code pageSize} 作 LIMIT（offset 固定 0）
      */
     List<Spot> ranking(String type, Pageable pageable);

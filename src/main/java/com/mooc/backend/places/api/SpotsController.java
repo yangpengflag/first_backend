@@ -71,7 +71,7 @@ public class SpotsController {
         return ResponseEntity.ok(spotService.getBySlug(slug));
     }
 
-    @Operation(summary = "景点排行榜", description = "公开免鉴权；type=rating|popular|bookmarks（默认 popular），limit 默认 10 上限 50。返回 SpotSummary 数组（Top N）。")
+    @Operation(summary = "景点排行榜", description = "公开免鉴权；type=rating|popular|bookmarks（默认 popular），limit 默认 10 上限 50。返回 SpotSummary 数组（Top N）。数据经缓存提供、最多滞后 5 分钟；景点写操作与收藏切换即时失效（下个请求即最新）。")
     @GetMapping("/ranking")
     public ResponseEntity<List<SpotSummary>> ranking(
             @RequestParam(required = false, defaultValue = "popular") String type,

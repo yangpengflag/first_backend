@@ -39,10 +39,13 @@ public class SpotBookmarkService {
 
     private final SpotBookmarkRepository spotBookmarkRepository;
     private final SpotRepository spotRepository;
+    private final RankingCacheService rankingCacheService;
 
-    public SpotBookmarkService(SpotBookmarkRepository spotBookmarkRepository, SpotRepository spotRepository) {
+    public SpotBookmarkService(SpotBookmarkRepository spotBookmarkRepository, SpotRepository spotRepository,
+                               RankingCacheService rankingCacheService) {
         this.spotBookmarkRepository = spotBookmarkRepository;
         this.spotRepository = spotRepository;
+        this.rankingCacheService = rankingCacheService;
     }
 
     @Transactional
@@ -50,7 +53,7 @@ public class SpotBookmarkService {
         if (spotRepository.findBySlugAndDeletedFalse(spotSlug).isEmpty()) {
             throw new PlacesException(ErrorCode.SPOT_NOT_FOUND);
         }
-        return spotBookmarkRepository.findBySpotSlugAndUserId(spotSlug, userId)
+        SpotBookmarkStatusResponse result = spotBookmarkRepository.findBySpotSlugAndUserId(spotSlug, userId)
                 .map(existing -> {
                     spotBookmarkRepository.delete(existing);
                     return SpotBookmarkStatusResponse.from(spotSlug, false);
@@ -60,6 +63,9 @@ public class SpotBookmarkService {
                     spotBookmarkRepository.save(bookmark);
                     return SpotBookmarkStatusResponse.from(spotSlug, true);
                 });
+        // 收藏计数变化：bookmarks 排行榜缓存失效，令下个请求即最新（change: add-spot-ranking-redis-cache）
+        rankingCacheService.evictBookmarks();
+        return result;
     }
 
     public boolean isBookmarked(String spotSlug, UUID userId) {

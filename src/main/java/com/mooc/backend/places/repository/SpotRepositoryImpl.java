@@ -69,8 +69,9 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
         String orderBy;
         String from;
         if ("bookmarks".equals(type)) {
-            // 主排序按实时聚合收藏数；并列时以 view_count、再以 slug 作 tiebreaker，保证结果确定
-            // （契约仅要求按收藏数 DESC）
+            // 主排序按收藏计数（SQL 每次执行实时聚合；排行榜端点响应经 RankingCacheService 缓存，
+            // 近实时 ≤5 分钟窗口，收藏切换 / 景点写操作即时失效）
+            // 并列时以 view_count、再以 slug 作 tiebreaker，保证结果确定（契约仅要求按收藏数 DESC）
             orderBy = "ORDER BY COALESCE(b.cnt, 0) DESC, s.view_count DESC, s.slug ASC";
             from = "FROM spots s LEFT JOIN (SELECT spot_slug, COUNT(*) AS cnt FROM spot_bookmarks GROUP BY spot_slug) b "
                     + "ON s.slug = b.spot_slug";

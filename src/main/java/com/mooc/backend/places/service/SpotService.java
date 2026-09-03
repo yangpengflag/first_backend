@@ -38,14 +38,15 @@ import java.util.UUID;
 @Service
 public class SpotService {
 
-    private static final int MAX_RANKING_LIMIT = 50;
-
     private final SpotRepository spotRepository;
     private final CityRepository cityRepository;
+    private final RankingCacheService rankingCacheService;
 
-    public SpotService(SpotRepository spotRepository, CityRepository cityRepository) {
+    public SpotService(SpotRepository spotRepository, CityRepository cityRepository,
+                       RankingCacheService rankingCacheService) {
         this.spotRepository = spotRepository;
         this.cityRepository = cityRepository;
+        this.rankingCacheService = rankingCacheService;
     }
 
     public SpotListResponse list(String city, String category, String tag, String q, String sort,
@@ -60,16 +61,13 @@ public class SpotService {
     /**
      * 景点排行榜：仅 PUBLISHED。type 非法时回退 popular；limit 钳制到 [1, 50]。
      * 返回截断后的 {@code SpotSummary} 列表（无分页包装，纯 Top N 数组）。
+     *
+     * <p>委托 {@link RankingCacheService}（Cache-Aside，change: add-spot-ranking-redis-cache）：
+     * 命中返回缓存快照（TTL 5 分钟内新鲜，写操作/收藏切换即时失效）；Redis 不可用或缓存禁用时
+     * 直查数据库，行为与原实现等价。
      */
     public List<SpotSummary> ranking(String type, int limit) {
-        String effectiveType = (type == null) ? "popular" : type;
-        String safeType = switch (effectiveType) {
-            case "rating", "popular", "bookmarks" -> effectiveType;
-            default -> "popular";
-        };
-        int safeLimit = Math.min(Math.max(limit, 1), MAX_RANKING_LIMIT);
-        List<Spot> spots = spotRepository.ranking(safeType, PageRequest.of(0, safeLimit));
-        return spots.stream().map(SpotSummary::from).toList();
+        return rankingCacheService.getRanking(type, limit);
     }
 
     public SpotDetail getBySlug(String slug) {
@@ -100,6 +98,8 @@ public class SpotService {
                 request.openingHours(), request.ticketInfo(), request.visitDuration(),
                 request.rating(), request.featured(), request.hiddenGem(), status, now);
         Spot saved = spotRepository.save(spot);
+        // 写路径使排行缓存失效：新景点可能进入 / 既有条目内容变化（change: add-spot-ranking-redis-cache）
+        rankingCacheService.evictAll();
         return toDetail(saved);
     }
 
@@ -114,6 +114,8 @@ public class SpotService {
                 request.openingHours(), request.ticketInfo(), request.visitDuration(),
                 request.rating(), request.featured(), request.hiddenGem(), request.status(), now);
         Spot saved = spotRepository.save(spot);
+        // 写路径使排行缓存失效：rating/status 等变化可进出榜（change: add-spot-ranking-redis-cache）
+        rankingCacheService.evictAll();
         return toDetail(saved);
     }
 
