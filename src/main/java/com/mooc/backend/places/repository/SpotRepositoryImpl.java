@@ -37,9 +37,12 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
         if (isNotBlank(q)) {
             where += " AND (s.name_en LIKE :q OR s.name_zh LIKE :q)";
         }
-        String order = "s.view_count DESC";
+        // 排序键在数据集内可能大面积并列（如 view_count 全为 0），此时 MySQL 不保证返回顺序，
+        // 缺少唯一 tie-breaker 会导致 offset 分页的相邻页返回重叠行或永久漏行。
+        // slug 为复合 slug 且全局唯一、创建后不可变，是确定性 tie-breaker 的合适选择。
+        String order = "s.view_count DESC, s.slug ASC";
         if ("hidden".equals(sort)) {
-            order = "s.hidden_gem DESC, s.view_count DESC";
+            order = "s.hidden_gem DESC, s.view_count DESC, s.slug ASC";
         }
         String sql = "SELECT s.* FROM spots s " + where + " ORDER BY " + order
                 + " LIMIT :limit OFFSET :offset";
@@ -66,17 +69,19 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
         String orderBy;
         String from;
         if ("bookmarks".equals(type)) {
-            // 主排序按实时聚合收藏数；并列时以 view_count 作 tiebreaker，保证结果确定（契约仅要求按收藏数 DESC）
-            orderBy = "ORDER BY COALESCE(b.cnt, 0) DESC, s.view_count DESC";
+            // 主排序按实时聚合收藏数；并列时以 view_count、再以 slug 作 tiebreaker，保证结果确定
+            // （契约仅要求按收藏数 DESC）
+            orderBy = "ORDER BY COALESCE(b.cnt, 0) DESC, s.view_count DESC, s.slug ASC";
             from = "FROM spots s LEFT JOIN (SELECT spot_slug, COUNT(*) AS cnt FROM spot_bookmarks GROUP BY spot_slug) b "
                     + "ON s.slug = b.spot_slug";
         } else if ("rating".equals(type)) {
             // MySQL 不支持 NULLS LAST 语法：用 IS NULL ASC 把无评分排到末尾
-            orderBy = "ORDER BY s.rating IS NULL ASC, s.rating DESC";
+            // slug 作 tie-breaker：评分并列 / 同为 null 时保证顺序确定
+            orderBy = "ORDER BY s.rating IS NULL ASC, s.rating DESC, s.slug ASC";
             from = "FROM spots s";
         } else {
-            // popular（默认）：按访问计数降序
-            orderBy = "ORDER BY s.view_count DESC";
+            // popular（默认）：按访问计数降序；并列时以 slug 保证顺序确定
+            orderBy = "ORDER BY s.view_count DESC, s.slug ASC";
             from = "FROM spots s";
         }
         String sql = "SELECT s.* " + from

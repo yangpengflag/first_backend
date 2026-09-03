@@ -15,6 +15,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -90,5 +91,52 @@ class PlacesSeederTest {
         Spot westLake = spotRepository.findBySlugAndDeletedFalse("hangzhou-west-lake").orElseThrow();
         assertThat(westLake.getNameEn()).isEqualTo("West Lake");
         assertThat(westLake.getCitySlug()).isEqualTo("hangzhou");
+    }
+
+    /**
+     * 种子景点须填充可展示字段：{@code tags} 全空会让卡片无标签且标签筛选器永不命中，
+     * {@code rating} 全为 null 会让卡片按契约不渲染评分，
+     * {@code featured} / {@code hiddenGem} 全 false 会让首页精选槽位与「小众优先」排序无内容。
+     */
+    @Test
+    void seedSpotsCarryDisplayableFields() {
+        seeder.seed();
+
+        List<Spot> spots = spotRepository.findAll();
+        assertThat(spots).isNotEmpty();
+
+        assertThat(spots).allSatisfy(spot -> {
+            assertThat(spot.getTags()).as("spot %s has non-empty tags", spot.getSlug()).isNotEmpty();
+            assertThat(spot.getRating()).as("spot %s has non-null rating", spot.getSlug()).isNotNull();
+        });
+
+        assertThat(spots).anyMatch(Spot::isFeatured);
+        assertThat(spots).anyMatch(Spot::isHiddenGem);
+    }
+
+    /** 标签词须跨景点复用：若每个标签只被一条景点使用，标签筛选器就退化成了搜索框。 */
+    @Test
+    void seedTagsAreReusedAcrossSpots() {
+        seeder.seed();
+
+        Map<String, Long> tagCounts = spotRepository.findAll().stream()
+                .flatMap(spot -> spot.getTags().stream())
+                .collect(Collectors.groupingBy(tag -> tag, Collectors.counting()));
+
+        assertThat(tagCounts).isNotEmpty();
+        assertThat(tagCounts).allSatisfy((tag, count) ->
+                assertThat(count).as("tag '%s' is used by at least 2 spots", tag).isGreaterThanOrEqualTo(2L));
+    }
+
+    /** 种子须含同名不同城的景点，使「重名 POI 各自可寻址」在真实数据上可验证（而非仅靠前端 mock）。 */
+    @Test
+    void seedContainsSameNameSpotsForDisambiguation() {
+        seeder.seed();
+
+        Spot hangzhou = spotRepository.findBySlugAndDeletedFalse("hangzhou-west-lake").orElseThrow();
+        Spot fuzhou = spotRepository.findBySlugAndDeletedFalse("fuzhou-west-lake").orElseThrow();
+
+        assertThat(hangzhou.getNameEn()).isEqualTo(fuzhou.getNameEn());          // 同名
+        assertThat(hangzhou.getCitySlug()).isNotEqualTo(fuzhou.getCitySlug());   // 不同城
     }
 }
