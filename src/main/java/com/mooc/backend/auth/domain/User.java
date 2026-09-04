@@ -9,8 +9,12 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -47,6 +51,21 @@ public class User extends BaseEntity {
 
     @Column(name = "avatar_url")
     private String avatarUrl;
+
+    /**
+     * 个人简介（纯文本，≤500 字符由入站校验保证），空串表示清空，null 表示未设置。
+     * 列宽 600 预留归一化余量。
+     */
+    @Column(length = 600)
+    private String bio;
+
+    /**
+     * 兴趣标签。null 表示未设置（区别于空数组——空数组表示已清空）。
+     * JSON 列，惯例对齐 {@code Post.tags}；入站去重后 ≤8 个、单条 ≤30 字符。
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tags")
+    private List<String> tags;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -255,6 +274,32 @@ public class User extends BaseEntity {
                 && tokenIssuedAt.isBefore(this.passwordChangedAt);
     }
 
+    // ---------- 个人档案 ----------
+
+    /**
+     * 部分更新本人档案：仅应用调用方提供的非空字段（null 表示"不修改该字段"），
+     * 并统一以传入 {@code now} 刷新更新时间。
+     *
+     * <p>不复用 {@link #setDisplayName(String)} / {@link #setAvatarUrl(String)}——
+     * 二者各自以系统时钟 {@code Instant.now()} touch，一次档案编辑会造成双重刷新
+     * 且时刻不可控；本方法是档案编辑（{@code PATCH /api/users/me}）的唯一入口。
+     */
+    public void updateProfile(String displayName, String avatarUrl, String bio, List<String> tags, Instant now) {
+        if (displayName != null) {
+            this.displayName = displayName;
+        }
+        if (avatarUrl != null) {
+            this.avatarUrl = avatarUrl;
+        }
+        if (bio != null) {
+            this.bio = bio;
+        }
+        if (tags != null) {
+            this.tags = List.copyOf(tags);
+        }
+        this.touch(now);
+    }
+
     // ---------- 软删除 ----------
 
     /**
@@ -289,6 +334,15 @@ public class User extends BaseEntity {
 
     public String getAvatarUrl() {
         return avatarUrl;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    /** null 表示未设置；否则返回防御性拷贝。 */
+    public List<String> getTags() {
+        return tags == null ? null : List.copyOf(tags);
     }
 
     public UserStatus getStatus() {
