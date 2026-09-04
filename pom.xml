@@ -110,6 +110,17 @@
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<!-- 显式钉死编译器级别为 17：否则 maven-compiler-plugin 3.14.x 会退回默认 source/target 1.8，
+					 导致 Java 17 文本块(""")编译失败（"未结束的字符串文字"）。java.version 仅设 release 属性，
+					 在此插件版本下未真正生效，故此处显式声明。 -->
+					<release>17</release>
+					<encoding>UTF-8</encoding>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 </project>
