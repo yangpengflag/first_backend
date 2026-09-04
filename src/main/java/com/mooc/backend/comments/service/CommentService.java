@@ -10,6 +10,9 @@ import com.mooc.backend.comments.domain.Comment;
 import com.mooc.backend.comments.exception.CommentException;
 import com.mooc.backend.auth.exception.ErrorCode;
 import com.mooc.backend.comments.repository.CommentRepository;
+import com.mooc.backend.notifications.domain.NotificationType;
+import com.mooc.backend.notifications.service.NotificationService;
+import com.mooc.backend.posts.domain.Post;
 import com.mooc.backend.posts.repository.PostRepository;
 
 import org.slf4j.Logger;
@@ -20,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -34,6 +38,11 @@ import java.util.stream.Collectors;
  * <p>两层模型：顶层评论（parentCommentId = null）+ 其回复。回复的父评论必须指向同帖的
  * 顶层评论（否则 {@code INVALID_PARENT_COMMENT}）。作者展示信息批量 IN 解析
  * （{@code UserRepository.findAllById}），缺失 / 已软删回退占位，避免 N+1 与隐私泄露。
+ *
+ * <p><b>通知挂接（Task 2.3，同事务直调）</b>：顶层评论 → 通知帖主；回复 → 仅通知
+ * <b>被回复的评论者</b>（被回复者即帖主时天然只有一条，不重复发）。评论软删（含顶层
+ * 级联软删的回复）撤销各条评论产生的<b>未读</b>通知（actor 以被删评论自身作者为准，
+ * 管理员代删同样成立）；已读通知保留。写路径 {@code @Transactional}，与通知同事务一致。
  */
 @Service
 public class CommentService {
@@ -45,22 +54,25 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public CommentService(CommentRepository commentRepository, PostRepository postRepository,
-                          UserRepository userRepository) {
+                          UserRepository userRepository, NotificationService notificationService) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     /** 发布评论：顶层或回复；校验帖存在、回复父评论同帖且为顶层评论。 */
+    @Transactional
     public CommentResponse create(UUID postId, UUID userId, CreateCommentRequest request, Instant now) {
-        if (postRepository.findByIdAndDeletedFalse(postId).isEmpty()) {
-            throw new CommentException(ErrorCode.POST_NOT_FOUND);
-        }
+        Post post = postRepository.findByIdAndDeletedFalse(postId)
+                .orElseThrow(() -> new CommentException(ErrorCode.POST_NOT_FOUND));
         UUID parentId = request.parentCommentId();
+        Comment parent = null;
         if (parentId != null) {
-            Comment parent = commentRepository.findByPostIdAndIdAndDeletedFalse(postId, parentId)
+            parent = commentRepository.findByPostIdAndIdAndDeletedFalse(postId, parentId)
                     .orElseThrow(() -> new CommentException(ErrorCode.INVALID_PARENT_COMMENT));
             if (!parent.isTopLevel()) {
                 throw new CommentException(ErrorCode.INVALID_PARENT_COMMENT);
@@ -68,6 +80,10 @@ public class CommentService {
         }
         Comment comment = Comment.create(postId, userId, request.content(), parentId, now);
         Comment saved = commentRepository.save(comment);
+        // 通知接收者：顶层评论 → 帖主；回复 → 被回复的评论者（自评论/自回复在 NotificationService 短路）
+        UUID recipientId = (parent != null) ? parent.getUserId() : post.getAuthorId();
+        notificationService.onInteraction(userId, recipientId,
+                NotificationType.POST_COMMENTED, postId, saved.getId(), now);
         AuthorView author = resolveAuthor(userId);
         return CommentResponse.from(saved, author.name(), author.avatarUrl(), 0L);
     }
@@ -95,7 +111,9 @@ public class CommentService {
     /**
      * 删除：仅作者本人；非作者 → NOT_COMMENT_AUTHOR；不存在 / 已软删 → COMMENT_NOT_FOUND。
      * 删除顶层评论时级联软删其全部回复（避免孤儿）；删除回复（叶子）不级联。
+     * 每条被软删的评论（含级联回复）撤销其产生的未读通知。
      */
+    @Transactional
     public void delete(UUID commentId, UUID userId, Instant now) {
         Comment comment = commentRepository.findByIdAndDeletedFalse(commentId)
                 .orElseThrow(() -> new CommentException(ErrorCode.COMMENT_NOT_FOUND));
@@ -110,11 +128,15 @@ public class CommentService {
             List<Comment> replies = commentRepository.findAllByParentCommentIdAndDeletedFalse(commentId);
             for (Comment reply : replies) {
                 reply.softDelete(now);
+                notificationService.onInteractionRemoved(reply.getUserId(),
+                        NotificationType.POST_COMMENTED, comment.getPostId(), reply.getId());
             }
             commentRepository.saveAll(replies);
         }
         comment.softDelete(now);
         commentRepository.save(comment);
+        notificationService.onInteractionRemoved(comment.getUserId(),
+                NotificationType.POST_COMMENTED, comment.getPostId(), comment.getId());
     }
 
     // ---------- 内部辅助 ----------

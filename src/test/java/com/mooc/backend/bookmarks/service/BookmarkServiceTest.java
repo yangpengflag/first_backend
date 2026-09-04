@@ -8,6 +8,8 @@ import com.mooc.backend.bookmarks.api.BookmarkSummary;
 import com.mooc.backend.bookmarks.domain.Bookmark;
 import com.mooc.backend.bookmarks.exception.BookmarkException;
 import com.mooc.backend.bookmarks.repository.BookmarkRepository;
+import com.mooc.backend.notifications.domain.NotificationType;
+import com.mooc.backend.notifications.service.NotificationService;
 import com.mooc.backend.posts.domain.Post;
 import com.mooc.backend.posts.domain.PostStatus;
 import com.mooc.backend.posts.repository.PostRepository;
@@ -47,16 +49,21 @@ class BookmarkServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private BookmarkService bookmarkService;
 
     private static final UUID POST = UUID.randomUUID();
     private static final UUID USER = UUID.randomUUID();
+    private static final UUID AUTHOR = UUID.randomUUID();
     private static final Instant NOW = Instant.parse("2026-08-28T10:00:00Z");
 
     @Test
     void toggleCreatesWhenNotExists() {
-        when(postRepository.findByIdAndDeletedFalse(POST)).thenReturn(Optional.of(mock(Post.class)));
+        Post post = postWithAuthor(AUTHOR);
+        when(postRepository.findByIdAndDeletedFalse(POST)).thenReturn(Optional.of(post));
         when(bookmarkRepository.findByPostIdAndUserId(POST, USER)).thenReturn(Optional.empty());
         when(bookmarkRepository.save(any(Bookmark.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -76,6 +83,34 @@ class BookmarkServiceTest {
 
         assertThat(resp.isBookmarked()).isFalse();
         verify(bookmarkRepository).delete(existing);
+    }
+
+    // ---------- 通知挂接（Task 2.3）：收藏→帖主 / 取消收藏→撤销未读 ----------
+
+    @Test
+    void bookmarkOnNotifiesPostAuthor() {
+        Post post = postWithAuthor(AUTHOR);
+        when(postRepository.findByIdAndDeletedFalse(POST)).thenReturn(Optional.of(post));
+        when(bookmarkRepository.findByPostIdAndUserId(POST, USER)).thenReturn(Optional.empty());
+        when(bookmarkRepository.save(any(Bookmark.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        bookmarkService.toggle(POST, USER, NOW);
+
+        verify(notificationService).onInteraction(
+                USER, AUTHOR, NotificationType.POST_BOOKMARKED, POST, null, NOW);
+    }
+
+    @Test
+    void bookmarkOffRevokesUnreadNotification() {
+        Bookmark existing = Bookmark.create(POST, USER, NOW);
+        // 取消路径不需要帖主身份（撤销按 actor 定位），post 用无 stub 的 mock
+        when(postRepository.findByIdAndDeletedFalse(POST)).thenReturn(Optional.of(mock(Post.class)));
+        when(bookmarkRepository.findByPostIdAndUserId(POST, USER)).thenReturn(Optional.of(existing));
+
+        bookmarkService.toggle(POST, USER, NOW);
+
+        verify(notificationService).onInteractionRemoved(
+                USER, NotificationType.POST_BOOKMARKED, POST, null);
     }
 
     @Test
@@ -140,6 +175,12 @@ class BookmarkServiceTest {
 
         assertThatThrownBy(() -> bookmarkService.isBookmarked(POST, USER))
                 .isInstanceOf(BookmarkException.class);
+    }
+
+    private Post postWithAuthor(UUID authorId) {
+        Post post = mock(Post.class);
+        when(post.getAuthorId()).thenReturn(authorId);
+        return post;
     }
 
     private User activeUser(UUID id, String name, String avatar) {

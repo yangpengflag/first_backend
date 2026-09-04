@@ -9,6 +9,8 @@ import com.mooc.backend.bookmarks.api.BookmarkSummary;
 import com.mooc.backend.bookmarks.domain.Bookmark;
 import com.mooc.backend.bookmarks.exception.BookmarkException;
 import com.mooc.backend.bookmarks.repository.BookmarkRepository;
+import com.mooc.backend.notifications.domain.NotificationType;
+import com.mooc.backend.notifications.service.NotificationService;
 import com.mooc.backend.posts.api.PostSummary;
 import com.mooc.backend.posts.domain.Post;
 import com.mooc.backend.posts.domain.PostStatus;
@@ -38,6 +40,10 @@ import java.util.stream.Collectors;
  * <p>切换收藏（一人一帖唯一，取消走物理删除）。列表全量返回用户收藏项：失效帖子以
  * {@code available=false} + {@code post=null} 呈现（不静默跳过），以消弭分页空档。
  * 作者信息批量 IN 解析，缺失 / 已软删回退占位。
+ *
+ * <p><b>通知挂接（Task 2.3，同事务直调）</b>：收藏成功 → 通知帖主（{@code POST_BOOKMARKED}，
+ * 自收藏由 {@code NotificationService} 短路）；取消收藏（物理删除）→ 撤销其产生的
+ * <b>未读</b>通知（已读保留），与 votes 撤销策略同构。
  */
 @Service
 public class BookmarkService {
@@ -49,28 +55,32 @@ public class BookmarkService {
     private final BookmarkRepository bookmarkRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public BookmarkService(BookmarkRepository bookmarkRepository, PostRepository postRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository, NotificationService notificationService) {
         this.bookmarkRepository = bookmarkRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     /** 切换收藏；返回切换后是否已收藏。 */
     @Transactional
     public BookmarkResponse toggle(UUID postId, UUID userId, Instant now) {
-        if (postRepository.findByIdAndDeletedFalse(postId).isEmpty()) {
-            throw new BookmarkException(ErrorCode.POST_NOT_FOUND);
-        }
+        Post post = postRepository.findByIdAndDeletedFalse(postId)
+                .orElseThrow(() -> new BookmarkException(ErrorCode.POST_NOT_FOUND));
         return bookmarkRepository.findByPostIdAndUserId(postId, userId)
                 .map(existing -> {
                     bookmarkRepository.delete(existing);
+                    notificationService.onInteractionRemoved(userId, NotificationType.POST_BOOKMARKED, postId, null);
                     return BookmarkResponse.from(postId, false);
                 })
                 .orElseGet(() -> {
                     Bookmark bookmark = Bookmark.create(postId, userId, now);
                     bookmarkRepository.save(bookmark);
+                    notificationService.onInteraction(userId, post.getAuthorId(),
+                            NotificationType.POST_BOOKMARKED, postId, null, now);
                     return BookmarkResponse.from(postId, true);
                 });
     }
