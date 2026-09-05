@@ -84,6 +84,12 @@ auth:
     # 投票：单用户每分钟（防刷票）。
     vote-per-user-per-minute: 10
 
+# 私信（change: add-direct-messages）：发送限流复用 auth/ratelimit 的 RateLimiter 组件，
+# 阈值由本模块自有配置承载（design.md：10 条/分钟起步，常量可配）。
+messaging:
+  rate-limit:
+    send-per-user-per-minute: 10
+
 # OpenAPI 文档产出（change: openapi-integration）
 springdoc:
   api-docs:
