@@ -36,6 +36,32 @@ spring:
   #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true
   # 凭据属敏感信息，禁止写进本文件或提交仓库。
 
+  # 定时任务线程池（change: add-travel-services）。默认值是 1，而汇率 / 天气两个刷新任务
+  # 会共用这个池：启动预热的天气任务最坏约 110s（11 城 × 2 端点 × 5s read timeout），
+  # 池为 1 时 cron 触发的汇率任务只能排在它后面。给到 2，两个 job 各自可跑。
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+  # MCP Server（change: add-travel-services）。
+  # !! 安全关键：默认值是 true，且默认 protocol=SSE —— 只要 starter 在 classpath 上，
+  #    不写这行就会注册 /sse 与 /mcp/message 两个 HTTP 端点。故此处显式关闭。
+  # 关闭不影响 @Tool 的用途：工具只需定义一次，同 JVM 内的 ChatClient 直接消费同一批
+  # bean，零传输；HTTP 传输只有「进程外的 MCP 客户端」才需要。
+  # 若将来要开，鉴权方案须单独评估：这些端点会落到 SecurityConfig 的
+  # anyRequest().authenticated()（fail-closed，正确）。严禁为让 MCP 跑通而 permitAll()——
+  # 那等于全互联网都能调工具、烧掉 OpenWeatherMap 配额。
+  ai:
+    mcp:
+      server:
+        enabled: false
+        # 注解扫描器的开关是独立的（不受上面 enabled: false 约束），默认也是 true。
+        # 它扫的是 mcp-annotations 的 @McpTool，本仓用的是 Spring AI 的 @Tool，两者不是同一个注解，
+        # 所以扫描器对本仓无用；开着只会在每次启动打三条 BeanPostProcessorChecker WARN。
+        annotation-scanner:
+          enabled: false
+
 server:
   port: 8080
 
@@ -50,6 +76,39 @@ app:
   # 生产可用此键作热停（kill switch）开关，不必回滚代码。
   ranking-cache:
     enabled: true
+
+  # 旅行实用工具：汇率 + 天气（change: add-travel-services）
+  travel:
+    exchange-rate:
+      # 功能开关。语义是「功能停用」而非 ranking-cache 的「绕过缓存但结果正确」：
+      # 关闭后不出网、不刷新，读端点返回空数据。可作热停开关，不必回滚代码。
+      enabled: true
+      # 出网固定一张 base=CNY 的表，展示方向由前端取倒数——不按目标币种拆键、拆调用。
+      base: CNY
+      refresh-cron: "0 30 3 * * *"       # 每日 03:30（容器时区，部署为 Asia/Shanghai）
+      # 软过期必须严格大于刷新周期（24h + 2h 余量）。取等或更小会让数据在每个周期末尾
+      # 都被标成 stale，这个标记随即失去信噪比。
+      soft-ttl: 26h
+      hard-ttl: 7d                       # 超过则返回空数据；同时是 Redis key 的物理 TTL
+    weather:
+      enabled: true
+      # 空值即哨兵：不装配外部客户端、不触发刷新、读端点天气字段返回 null
+      # （同 spring.mail.host 未设时回退 LoggingMailSender 的套路）。
+      # 凭据经环境变量注入，禁止写进本文件或提交仓库。
+      api-key: ${OPENWEATHER_API_KEY:}
+      refresh-cron: "0 0 */3 * * *"      # 每 3h：11 城 × 2 端点 × 8 轮 = 176 次/天
+      lang: en                           # 上游 description 语言，显式给值以防上游改默认
+      soft-ttl: 4h                       # > 3h 刷新周期，留 1h 余量
+      hard-ttl: 24h
+    client:
+      # 全仓首个出网客户端。两个超时都显式设定：不设则 JDK 默认可能无限等待，
+      # 一个挂住的上游会占满调度线程。
+      connect-timeout: 2s
+      read-timeout: 5s
+    # 多实例抢主锁 TTL，上下两界都要满足：
+    #   单轮任务最坏耗时(≈110s) < refresh-lock-ttl < 最短刷新周期(3h)
+    # 小于下界则锁在任务跑完前过期、另一实例接着抢到，正是这把锁要防的事。
+    refresh-lock-ttl: 5m
 
 auth:
   jwt:

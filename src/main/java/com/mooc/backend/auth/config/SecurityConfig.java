@@ -105,6 +105,11 @@ public class SecurityConfig {
                         // 回复端点 /api/spot-comments/* 不匹配 /api/spots/*, 由 anyRequest().authenticated() 兜底
                         .requestMatchers(HttpMethod.GET, "/api/spots/*/comments").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/spots/*").permitAll()
+                        // 旅行实用工具公开读端点（change: add-travel-services）。仅 GET：
+                        // 该模块没有任何写端点，放行通配是为了不给将来误加的写端点开口子；
+                        // MCP 相关路径（/sse、/mcp/message）严禁加入放行——那会让任意来源调用
+                        // AI 工具并烧尽外部 API 配额，anyRequest().authenticated() 对 MCP 是 fail-closed
+                        .requestMatchers(HttpMethod.GET, "/api/travel/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Spring Security 默认对未认证请求返回 403；本项目要求 401
