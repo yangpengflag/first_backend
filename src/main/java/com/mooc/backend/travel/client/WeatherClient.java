@@ -181,14 +181,23 @@ public class WeatherClient {
     private record Bucket(long dt, Main main, WeatherEntry[] weather) {
     }
 
-    /** {@code app.travel.weather.enabled=true} 且 key 非空白时才装配本 bean。 */
+    /**
+     * {@code app.travel.weather.enabled=true} 且 key 非空白时才装配本 bean。
+     *
+     * <p><b>必须从 Environment 读属性，不能经 bean factory 取 {@code TravelProperties}。</b>
+     * {@code @Conditional} 在 bean 定义阶段求值，此时 {@code @EnableConfigurationProperties}
+     * 注册的绑定类未必已就位——实测中该条件长期判 false、客户端从未装配（key 明明已注入），
+     * 直到给 {@code WeatherRefreshJob} 加运行时诊断才定位到 {@code configured=true 但
+     * clientPresent=false}。从 Environment 直接读（占位符会按需解析）与 bean 生命周期解耦。
+     */
     static final class WeatherConfiguredCondition implements Condition {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            TravelProperties props = context.getBeanFactory()
-                    .getBeanProvider(TravelProperties.class)
-                    .getIfAvailable();
-            return props != null && props.weather() != null && props.weather().configured();
+            Boolean enabled = context.getEnvironment()
+                    .getProperty("app.travel.weather.enabled", Boolean.class);
+            String apiKey = context.getEnvironment()
+                    .getProperty("app.travel.weather.api-key");
+            return Boolean.TRUE.equals(enabled) && apiKey != null && !apiKey.isBlank();
         }
     }
 }
