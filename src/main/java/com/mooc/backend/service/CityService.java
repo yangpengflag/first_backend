@@ -1,0 +1,64 @@
+package com.mooc.backend.service;
+
+import com.mooc.backend.exception.ErrorCode;
+import com.mooc.backend.dto.response.CityDetail;
+import com.mooc.backend.dto.response.CityListResponse;
+import com.mooc.backend.dto.response.CitySummary;
+import com.mooc.backend.dto.response.SpotSummary;
+import com.mooc.backend.entity.City;
+import com.mooc.backend.entity.SpotStatus;
+import com.mooc.backend.exception.PlacesException;
+import com.mooc.backend.repository.CityRepository;
+import com.mooc.backend.repository.SpotRepository;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+/**
+ * 城市读服务（只读）。列表按 {@code name} 升序分页，详情组装 Top POI 与相关攻略占位。
+ *
+ * <p>{@code postCount} / 相关攻略依赖 {@code post-location-tagging}（尚未落地），本期置 0 / 空列表。
+ * 城市 Top POI 与 spotCount 均仅统计 {@code PUBLISHED} 景点，与景点公开读一致。
+ * 所有对外只读，不写实体。
+ */
+@Service
+public class CityService {
+
+    private final CityRepository cityRepository;
+    private final SpotRepository spotRepository;
+
+    public CityService(CityRepository cityRepository, SpotRepository spotRepository) {
+        this.cityRepository = cityRepository;
+        this.spotRepository = spotRepository;
+    }
+
+    public CityListResponse list(int page, int size) {
+        var pageable = PageRequest.of(Math.max(0, page - 1), size, Sort.by(Sort.Direction.ASC, "name"));
+        Page<City> cityPage = cityRepository.findByDeletedFalse(pageable);
+        List<CitySummary> items = cityPage.getContent().stream().map(this::toSummary).toList();
+        return CityListResponse.of(items, page, size, cityPage.getTotalElements());
+    }
+
+    public CityDetail getBySlug(String slug) {
+        City city = cityRepository.findBySlugAndDeletedFalse(slug)
+                .orElseThrow(() -> new PlacesException(ErrorCode.CITY_NOT_FOUND));
+        List<SpotSummary> topSpots = spotRepository
+                .findByCitySlugAndStatusAndDeletedFalse(slug, SpotStatus.PUBLISHED,
+                        PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "viewCount")))
+                .stream()
+                .map(SpotSummary::from)
+                .toList();
+        // 相关攻略：post-location-tagging 落地前为空
+        long spotCount = spotRepository.countByCitySlugAndStatusAndDeletedFalse(city.getSlug(), SpotStatus.PUBLISHED);
+        return CityDetail.from(city, spotCount, topSpots, List.of());
+    }
+
+    private CitySummary toSummary(City city) {
+        long spotCount = spotRepository.countByCitySlugAndStatusAndDeletedFalse(city.getSlug(), SpotStatus.PUBLISHED);
+        return CitySummary.from(city, spotCount);
+    }
+}
