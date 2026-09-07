@@ -102,6 +102,14 @@
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
 		</dependency>
+		<!-- Chat 模型接入（change: ai-chat-core）：OpenAI 兼容协议，经 base-url 指向
+		     DeepSeek（国内可直连、无代理依赖）。api-key 为空时依赖自动配置须优雅跳过
+		     （fail-closed，spike 1.1 验证）——若空 key 导致 context 启动失败，则须用
+		     spring.ai.model.chat=none 关闭 auto-config 后自装配（见 design.md D2）。 -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -137,6 +145,9 @@
 						     （既烧配额，也让测试依赖外网）。需要启用路径的用例用 @TestPropertySource 覆盖。 -->
 						<app.travel.exchange-rate.enabled>false</app.travel.exchange-rate.enabled>
 						<app.travel.weather.enabled>false</app.travel.weather.enabled>
+						<!-- AI 助手（change: ai-chat-core）：测试固定禁能，避免任何测试装配真实模型调用。
+						     需要装配行为的用例用 @TestPropertySource 显式覆盖。 -->
+						<app.ai-chat.enabled>false</app.ai-chat.enabled>
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>

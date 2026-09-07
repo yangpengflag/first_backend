@@ -66,6 +66,20 @@ spring:
   # anyRequest().authenticated()（fail-closed，正确）。严禁为让 MCP 跑通而 permitAll()——
   # 那等于全互联网都能调工具、烧掉 OpenWeatherMap 配额。
   ai:
+    # 模型自动配置总开关（change: ai-chat-core，spike 1.1 实测）：openai starter 的
+    # AudioSpeech 等 auto-config 在空 api-key 下直接抛 "OpenAI API key must be set"、
+    # 导致 context 启动失败（fail-START）。本仓要求空 key 也能启动（fail-closed），
+    # 故全部置 none 关闭自动装配，改由 AiChatConfig 在 key 非空时显式自装配 ChatModel。
+    model:
+      # spike 1.1 实测：六类模型 auto-config 空 key 全部 fail-START（含 Chat 的 openAiApi），
+      # 故全部 none，改由 AiChatConfig 在 key 非空时自建 ChatModel/ChatClient。
+      chat: none
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
     mcp:
       server:
         enabled: false
@@ -74,6 +88,17 @@ spring:
         # 所以扫描器对本仓无用；开着只会在每次启动打三条 BeanPostProcessorChecker WARN。
         annotation-scanner:
           enabled: false
+
+    # Chat 模型接入（change: ai-chat-core）：DeepSeek 走 OpenAI 兼容协议。
+    # api-key 仅经环境变量注入，空值 = 哨兵——auto-config 必须优雅跳过（fail-closed），
+    # 未装配时对话端点返回显式降级而非 5xx/启动失败（见 design.md D2，spike 1.1 实测）。
+    # 凭据属敏感信息，禁止写进本文件或提交仓库。
+    openai:
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat:
+        options:
+          model: deepseek-chat
 
 server:
   port: 8080
@@ -122,6 +147,20 @@ app:
     #   单轮任务最坏耗时(≈110s) < refresh-lock-ttl < 最短刷新周期(3h)
     # 小于下界则锁在任务跑完前过期、另一实例接着抢到，正是这把锁要防的事。
     refresh-lock-ttl: 5m
+
+  # AI 行程助手（change: ai-chat-core）。语义与 travel 各 feature 开关一致：
+  # enabled=false 是「功能停用」kill switch（对话端点恒降级），无需回滚代码。
+  # 装配与否还取决于 spring.ai.openai.api-key 是否非空（双条件）。
+  ai-chat:
+    enabled: true
+    # 上下文窗口：每次生成载入会话最近 N 条消息（含本轮 user 消息），控制 token 预算
+    context-window: 20
+    # 匿名会话保留天数：超过则清理任务删除会话及其消息，防 DB 无限膨胀
+    retention-days: 30
+    # 游客免登录端点防滥用：IP 与会话双维度滑动窗口（复用 auth.ratelimit.RateLimiter）
+    rate-limit:
+      per-ip-per-minute: 10
+      per-session-per-minute: 20
 
 auth:
   jwt:
