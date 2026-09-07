@@ -85,7 +85,9 @@ public class AuthService {
         user.issueVerificationCode(newVerificationCode(), now(), properties.verificationCodeTtl());
 
         User saved = userRepository.save(user);
-        mailSender.sendVerificationEmail(email, saved.getVerificationCode());
+        // fail-open：验证邮件投递失败不阻断注册（用户已以 EMAIL_UNVERIFIED 落库）
+        sendQuietly("verification email", email,
+                () -> mailSender.sendVerificationEmail(email, saved.getVerificationCode()));
         return UserResponse.from(saved);
     }
 
@@ -120,7 +122,9 @@ public class AuthService {
             if (user.getStatus() == UserStatus.EMAIL_UNVERIFIED) {
                 user.issueVerificationCode(newVerificationCode(), now(), properties.verificationCodeTtl());
                 userRepository.save(user);
-                mailSender.sendVerificationEmail(email, user.getVerificationCode());
+                // fail-open：重发邮件失败也不得破坏「恒定成功」防枚举语义
+                sendQuietly("verification email", email,
+                        () -> mailSender.sendVerificationEmail(email, user.getVerificationCode()));
             }
         });
     }
@@ -229,7 +233,9 @@ public class AuthService {
             if (user.getStatus() != UserStatus.DELETED) {
                 user.issuePasswordResetCode(newResetCode(), now(), properties.passwordResetCodeTtl());
                 userRepository.save(user);
-                mailSender.sendPasswordResetEmail(email, user.getPasswordResetCode());
+                // fail-open：重置邮件投递失败不破坏「恒定 202」防枚举语义（回归 bug：SMTP 不可达曾致 500）
+                sendQuietly("password reset email", email,
+                        () -> mailSender.sendPasswordResetEmail(email, user.getPasswordResetCode()));
             }
         });
     }
@@ -278,6 +284,24 @@ public class AuthService {
             mailSender.sendPasswordChangedNotice(email);
         } catch (Exception ex) {
             log.error("Password-changed notice failed to send; reset already applied. to={}", email, ex);
+        }
+    }
+
+    /**
+     * 业务邮件（注册验证 / 重发 / 密码重置申请）采用 <b>fail-open</b>：投递失败只记日志，
+     * 绝不向调用方抛异常。
+     *
+     * <p>理由：邮件服务抖动不应把「注册 201」或「忘记密码 202（恒定成功，防枚举）」
+     * 变成 500，或让请求长时间挂起（SMTP 握手可能秒级失败，也可能等满系统超时）。
+     * 验证码 / 重置码已在保存用户时持久化，此处失败仅意味着收件人暂时收不到邮件；
+     * 可凭日志排查，日志按既有安全约束不落一次性码。
+     */
+    private void sendQuietly(String purpose, String toEmail, Runnable send) {
+        try {
+            send.run();
+        } catch (Exception ex) {
+            log.warn("[MAIL] failed to send {} to={}; degraded to no-op (API outcome unchanged). Cause: {}",
+                    purpose, toEmail, ex.toString());
         }
     }
 

@@ -35,6 +35,19 @@ spring:
   #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
   #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true
   # 凭据属敏感信息，禁止写进本文件或提交仓库。
+  # 也可覆盖连接/读写超时（默认下方 5s，覆盖方式同属 spring.mail.properties.* 宽松绑定）：
+  #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_CONNECTIONTIMEOUT=5000
+  #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_TIMEOUT=5000
+  #   SPRING_MAIL_PROPERTIES_MAIL_SMTP_WRITETIMEOUT=5000
+  mail:
+    properties:
+      mail:
+        smtp:
+          # SMTP 超时兜底：仅当显式配置 SPRING_MAIL_HOST 时才生效。
+          # 防止不可达主机让注册/重发/忘记密码请求挂起数分钟（服务端已 fail-open，仍要限时）。
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
   # 定时任务线程池（change: add-travel-services）。默认值是 1，而汇率 / 天气两个刷新任务
   # 会共用这个池：启动预热的天气任务最坏约 110s（11 城 × 2 端点 × 5s read timeout），
