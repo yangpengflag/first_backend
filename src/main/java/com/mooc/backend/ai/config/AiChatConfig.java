@@ -76,8 +76,10 @@ public class AiChatConfig {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
             Environment env = context.getEnvironment();
-            String enabled = env.getProperty("app.ai-chat.enabled");
-            if (enabled != null && !enabled.equalsIgnoreCase("true")) {
+            // 用 Boot 宽松绑定读布尔（认 on/yes/true 等变体），避免手写字符串比较
+            // 与 @ConfigurationProperties 的绑定语义分叉（review F2）。
+            Boolean enabled = env.getProperty("app.ai-chat.enabled", Boolean.class, true);
+            if (!Boolean.TRUE.equals(enabled)) {
                 return false;
             }
             String apiKey = env.getProperty("spring.ai.openai.api-key", "");

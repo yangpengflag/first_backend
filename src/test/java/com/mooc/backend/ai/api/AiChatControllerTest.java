@@ -158,6 +158,29 @@ class AiChatControllerTest {
     }
 
     @Test
+    void streamedErrorEmitsErrorEventAndFinishes() throws Exception {
+        // R3（review P2）：模型异常 → SSE error 事件后终结，而不是悬挂或 200 半截
+        allowRateLimit();
+        when(aiChatService.configured()).thenReturn(true);
+        when(aiChatService.stream(anyString(), anyString()))
+                .thenReturn(Flux.error(new RuntimeException("upstream boom")));
+
+        MvcResult mvcResult = mockMvc.perform(post("/api/ai/chat")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
+                .andExpect(status().isOk())
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    if (!body.contains("event:error") || body.contains("event:done")) {
+                        throw new AssertionError("expected error-only SSE terminal: " + body);
+                    }
+                });
+    }
+
+    @Test
     void mcpPathsStayFailClosedForAnonymousClients() throws Exception {
         mockMvc.perform(post("/mcp/message"))
                 .andExpect(status().isUnauthorized());

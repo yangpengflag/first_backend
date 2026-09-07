@@ -44,6 +44,10 @@ public class ChatCleanupJob {
     /** 删除保留期前的会话及其消息；返回删除的会话数（幂等）。 */
     @Transactional
     public int purgeExpired(Instant now, int retentionDays) {
+        // 注：@Transactional 在 bean 代理上生效。scheduledPurge 经由调度器调用的是
+        // 代理对象，其自身事务与内部 this.purgeExpired 的 REQUIRED 传播合并为同一事务，
+        // 保证「删消息 + 删会话」整批原子（自调用不绕过代理）。
+        // 单测直接调 purgeExpired 亦经代理获得独立事务。
         Instant cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
         List<ChatSession> expired = chatSessionRepository.findByCreatedAtBefore(cutoff);
         int removed = 0;
@@ -56,7 +60,9 @@ public class ChatCleanupJob {
     }
 
     @Scheduled(cron = "${app.ai-chat.cleanup-cron:0 30 4 * * *}")
+    @Transactional
     public void scheduledPurge() {
+        // 入口方法带事务（经代理调用）：让内部 this.purgeExpired 的删除在同一事务内原子。
         purgeExpired(clock.instant(), properties.retentionDays());
     }
 }

@@ -3,6 +3,8 @@ package com.mooc.backend.ai.service;
 import com.mooc.backend.ai.domain.ChatMessage;
 import com.mooc.backend.ai.domain.ChatSession;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -33,6 +36,8 @@ import java.util.List;
  */
 @Service
 public class AiChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiChatService.class);
 
     private final ObjectProvider<ChatClient> chatClientProvider;
     private final ChatSessionService chatSessionService;
@@ -78,8 +83,24 @@ public class AiChatService {
                 .stream()
                 .content()
                 .doOnNext(assistantSink::append)
-                .doOnComplete(() -> chatSessionService.appendAssistantMessage(
-                        session, assistantSink.toString(), clock.instant()));
+                // 完成信号切到 boundedElastic：避免在 WebClient 事件循环线程同步跑 JDBC
+                // 落库阻塞（review F3-1）。
+                .publishOn(Schedulers.boundedElastic())
+                .doOnComplete(() ->
+                        persistAssistantSafely(session, assistantSink.toString()));
+    }
+
+    /**
+     * assistant 全文落库，失败<b>只告警不转 error</b>（review F3-2）：回答已完整流出给
+     * 客户端，落库失败不应让 UI 误删已交付内容；告警留痕、可后续重试/审计。
+     */
+    private void persistAssistantSafely(ChatSession session, String fullAnswer) {
+        try {
+            chatSessionService.appendAssistantMessage(session, fullAnswer, clock.instant());
+        } catch (RuntimeException e) {
+            log.warn("Failed to persist assistant message for session {} (answer already delivered)",
+                    session.getSessionId(), e);
+        }
     }
 
     private List<Message> toSpringMessages(List<ChatMessage> persisted) {

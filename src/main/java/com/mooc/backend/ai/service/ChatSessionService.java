@@ -41,9 +41,19 @@ public class ChatSessionService {
     /** 取或建会话（无感创建，游客 owner 恒 null）。 */
     @Transactional
     public ChatSession ensureSession(String sessionId, Instant now) {
-        return chatSessionRepository.findBySessionId(sessionId)
-                .orElseGet(() -> chatSessionRepository.save(
-                        ChatSession.create(sessionId, null, now)));
+        ChatSession existing = chatSessionRepository.findBySessionId(sessionId).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        try {
+            // saveAndFlush：让唯一键冲突在事务内尽早暴露（review F4）
+            return chatSessionRepository.saveAndFlush(
+                    ChatSession.create(sessionId, null, now));
+        } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
+            // 并发首轮同 sessionId：另一请求已建成，重查复用而非 500
+            return chatSessionRepository.findBySessionId(sessionId)
+                    .orElseThrow(() -> conflict);
+        }
     }
 
     /** user 消息先落库（在调模型之前调用）。 */
