@@ -46,6 +46,9 @@ public enum ErrorCode {
     /** 触发限流。 */
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
 
+    /** AI 助手未装配（缺模型凭据 / 功能开关关闭），对话端点显式降级（change: ai-chat-core）。 */
+    AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI chat is not available right now."),
+
     /** 帖子不存在、已被软删，或非公开（DRAFT）状态。 */
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "Post not found."),
 

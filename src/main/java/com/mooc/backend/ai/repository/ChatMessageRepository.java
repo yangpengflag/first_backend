@@ -20,4 +20,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
      */
     List<ChatMessage> findBySession_IdAndDeletedFalseOrderByCreatedAtDescIdDesc(
             UUID sessionId, Pageable pageable);
+
+    /** 清理：删除某会话的全部消息（软删行一并物理删，清理不走软删语义）。 */
+    void deleteBySession_Id(UUID sessionId);
 }

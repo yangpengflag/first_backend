@@ -110,6 +110,9 @@ public class SecurityConfig {
                         // MCP 相关路径（/sse、/mcp/message）严禁加入放行——那会让任意来源调用
                         // AI 工具并烧尽外部 API 配额，anyRequest().authenticated() 对 MCP 是 fail-closed
                         .requestMatchers(HttpMethod.GET, "/api/travel/**").permitAll()
+                        // AI 对话（change: ai-chat-core）：游客免登录，仅精确放行该 POST 路径；
+                        // 防滥用限流（IP + 会话双维）在 AiChatController 内进行。
+                        .requestMatchers(HttpMethod.POST, "/api/ai/chat").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Spring Security 默认对未认证请求返回 403；本项目要求 401
