@@ -6,6 +6,7 @@ import com.mooc.backend.dto.response.SearchResponse;
 import com.mooc.backend.entity.City;
 import com.mooc.backend.entity.Post;
 import com.mooc.backend.entity.Spot;
+import com.mooc.backend.entity.SpotStatus;
 import com.mooc.backend.repository.CityRepository;
 import com.mooc.backend.repository.PostRepository;
 import com.mooc.backend.repository.SpotRepository;
@@ -168,7 +169,10 @@ public class SearchService {
             cityRepository.findBySlugAndDeletedFalse(slug).ifPresent(c -> cities.put(slug, c));
         }
         if (!spotSlugs.isEmpty()) {
-            spotRepository.findBySlugInAndDeletedFalse(List.copyOf(spotSlugs))
+            // 必须按当行 status 过滤：索引水位线滞后下，已转 DRAFT 的 spot 行仍存在且未软删，
+            // 若不判 PUBLISHED 会泄漏进结果（spec R3「MySQL 当行 PUBLISHED 为准绳」）
+            spotRepository.findBySlugInAndDeletedFalse(List.copyOf(spotSlugs)).stream()
+                    .filter(s -> SpotStatus.PUBLISHED == s.getStatus())
                     .forEach(s -> spots.put(s.getSlug(), s));
         }
         if (!postIds.isEmpty()) {

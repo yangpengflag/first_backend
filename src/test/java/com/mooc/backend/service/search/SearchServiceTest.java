@@ -1,6 +1,7 @@
 package com.mooc.backend.service.search;
 
 import com.mooc.backend.config.SearchProperties;
+import com.mooc.backend.dto.response.SearchItemResponse;
 import com.mooc.backend.dto.response.SearchResponse;
 import com.mooc.backend.entity.City;
 import com.mooc.backend.entity.Post;
@@ -127,6 +128,31 @@ class SearchServiceTest {
 
         assertThat(response.getItems()).isEmpty();
         assertThat(response.getTotal()).isZero();
+    }
+
+    @Test
+    void dropsSpotThatTurnedDraftSinceIndexing() {
+        // R3-S1（review P1）：向量命中某 spot，但其已由 PUBLISHED 转 DRAFT（水位线延迟，行仍存在）→
+        // 以 MySQL 当行状态为准丢弃；同在索引里的 PUBLISHED spot 保留
+        when(retriever.search(eq("lake"), eq(20), any())).thenReturn(List.of(
+                new Document("d1", "t", Map.of("type", "spot", "slug", "hz-draft")),
+                new Document("d2", "t", Map.of("type", "spot", "slug", "hz-live"))));
+        when(spotRepository.findBySlugInAndDeletedFalse(any())).thenReturn(List.of(
+                draftSpot("hz-draft", "Draft Lake"),
+                spot("hz-live", "Live Lake", "s")));
+
+        SearchResponse response = service.search("lake", List.of(), 10);
+
+        assertThat(response.getItems()).extracting(SearchItemResponse::getKey)
+                .containsExactly("hz-live");
+    }
+
+    /** 构造 DRAFT 状态景点（实体化过滤测试用）。 */
+    private static Spot draftSpot(String slug, String nameEn) {
+        return Spot.create(UUID.randomUUID(), slug, "中文名", nameEn, "hangzhou",
+                com.mooc.backend.entity.SpotCategory.NATURE, List.of(), null, null, null, 30.0, 120.0,
+                null, List.of(), "s", null, null, null, null, null, null,
+                null, false, false, SpotStatus.DRAFT, Instant.now());
     }
 
     @Test
