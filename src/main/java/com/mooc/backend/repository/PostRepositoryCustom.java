@@ -1,4 +1,5 @@
 package com.mooc.backend.repository;
+import com.mooc.backend.entity.Post;
 import com.mooc.backend.entity.PostSort;
 
 import com.mooc.backend.repository.PostStatsView;
@@ -30,4 +31,11 @@ public interface PostRepositoryCustom {
 
     /** 按地点过滤的 PUBLISHED 总数（offset 分页 total 用）。 */
     long countPublishedByLocation(String cityId, String spotId);
+
+    /**
+     * 关键词搜索（change: ai-semantic-search，tasks 1.3）：LIKE {@code title}（通配符转义），
+     * 仅 PUBLISHED 且未软删，按 {@code title, id} 稳定排序取前 {@code limit} 条。
+     * 不含 content：TEXT 全表 LIKE 成本高且噪声大（见 design.md D3）。
+     */
+    List<Post> searchByKeyword(String q, int limit);
 }

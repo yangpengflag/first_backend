@@ -1,4 +1,5 @@
 package com.mooc.backend.repository;
+import com.mooc.backend.entity.Post;
 import com.mooc.backend.entity.PostSort;
 
 import com.mooc.backend.repository.PostStatsView;
@@ -174,5 +175,20 @@ public class PostRepositoryImpl implements PostRepositoryCustom {
                 .putLong(uuid.getMostSignificantBits())
                 .putLong(uuid.getLeastSignificantBits())
                 .array();
+    }
+
+    @Override
+    public List<Post> searchByKeyword(String q, int limit) {
+        String sql = """
+                SELECT p.* FROM posts p
+                WHERE p.deleted = false AND p.status = 'PUBLISHED'
+                  AND p.title LIKE :q ESCAPE '\\\\'
+                ORDER BY p.title ASC, p.id ASC
+                LIMIT :limit
+                """;
+        var query = em.createNativeQuery(sql, Post.class);
+        query.setParameter("q", LikePatterns.contains(q));
+        query.setParameter("limit", limit);
+        return query.getResultList();
     }
 }

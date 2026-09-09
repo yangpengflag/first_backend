@@ -65,6 +65,21 @@ public class SpotRepositoryImpl implements SpotRepositoryCustom {
     }
 
     @Override
+    public List<Spot> searchByKeyword(String q, int limit) {
+        String sql = """
+                SELECT s.* FROM spots s
+                WHERE s.deleted = false AND s.status = 'PUBLISHED'
+                  AND (s.name_en LIKE :q ESCAPE '\\\\' OR s.name_zh LIKE :q ESCAPE '\\\\')
+                ORDER BY s.view_count DESC, s.slug ASC
+                LIMIT :limit
+                """;
+        var query = em.createNativeQuery(sql, Spot.class);
+        query.setParameter("q", LikePatterns.contains(q));
+        query.setParameter("limit", limit);
+        return query.getResultList();
+    }
+
+    @Override
     public List<Spot> ranking(String type, Pageable pageable) {
         String orderBy;
         String from;

@@ -18,7 +18,7 @@ import java.util.UUID;
  * 对外只读 API 一律经 {@code findBySlugAndDeletedFalse} / {@code findByDeletedFalse} 过滤软删。
  * 列表无筛选维度（省份 / 标签 / 浏览量已随 {@code city-module} 精简移除），仅按 {@code name} 排序分页。
  */
-public interface CityRepository extends JpaRepository<City, UUID> {
+public interface CityRepository extends JpaRepository<City, UUID>, CityRepositoryCustom {
 
     Optional<City> findBySlugAndDeletedFalse(String slug);
 

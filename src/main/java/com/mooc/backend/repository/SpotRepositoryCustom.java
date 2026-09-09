@@ -18,6 +18,13 @@ public interface SpotRepositoryCustom {
 
     List<Spot> search(String city, String category, String tag, String q, String sort, Pageable pageable);
 
+    /**
+     * 关键词搜索（change: ai-semantic-search，tasks 1.2）：独立于 {@link #search} 的轻量方法，
+     * 复用同一 LIKE 口径（{@code name_en / name_zh} 包含匹配，通配符转义），
+     * 仅 PUBLISHED 且未软删，按 view_count DESC + slug 稳定排序取前 {@code limit} 条。
+     */
+    List<Spot> searchByKeyword(String q, int limit);
+
     long countSearch(String city, String category, String tag, String q);
 
     /**
