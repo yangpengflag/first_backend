@@ -2,9 +2,12 @@ package com.mooc.backend.service.rag;
 
 import com.mooc.backend.config.AiRagProperties;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter.Expression;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 
 import java.time.Duration;
 import java.util.List;
@@ -67,6 +70,62 @@ class KnowledgeRetrieverTest {
                 .thenThrow(new IllegalStateException("milvus down"));
 
         assertThat(retriever.search("hello")).isEmpty();
+    }
+
+    // ---- change: ai-semantic-search，tasks 2.1 / 2.2：带 topK 与类型过滤的重载 ----
+
+    @Test
+    void overloadForwardsTopKAndFilterExpression() {
+        VectorStore vs = mock(VectorStore.class);
+        when(store.store()).thenReturn(Optional.of(vs));
+        when(vs.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+
+        Expression filter = new FilterExpressionBuilder().in("type", List.of("spot")).build();
+        retriever.search("lake", 7, filter);
+
+        ArgumentCaptor<SearchRequest> captor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vs).similaritySearch(captor.capture());
+        SearchRequest request = captor.getValue();
+        assertThat(request.getTopK()).isEqualTo(7);
+        assertThat(request.getFilterExpression()).isEqualTo(filter);
+    }
+
+    @Test
+    void overloadWithoutFilterLeavesExpressionEmpty() {
+        VectorStore vs = mock(VectorStore.class);
+        when(store.store()).thenReturn(Optional.of(vs));
+        when(vs.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+
+        retriever.search("lake", 3, null);
+
+        ArgumentCaptor<SearchRequest> captor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vs).similaritySearch(captor.capture());
+        assertThat(captor.getValue().getTopK()).isEqualTo(3);
+        assertThat(captor.getValue().hasFilterExpression()).isFalse();
+    }
+
+    @Test
+    void originalSearchDelegatesWithDefaultTopKAndNoFilter() {
+        VectorStore vs = mock(VectorStore.class);
+        when(store.store()).thenReturn(Optional.of(vs));
+        when(vs.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+
+        retriever.search("hello");
+
+        ArgumentCaptor<SearchRequest> captor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vs).similaritySearch(captor.capture());
+        assertThat(captor.getValue().getTopK()).isEqualTo(PROPS.topK());
+        assertThat(captor.getValue().hasFilterExpression()).isFalse();
+    }
+
+    @Test
+    void overloadInheritsFailOpenSemantics() {
+        VectorStore vs = mock(VectorStore.class);
+        when(store.store()).thenReturn(Optional.of(vs));
+        when(vs.similaritySearch(any(SearchRequest.class)))
+                .thenThrow(new IllegalStateException("milvus down"));
+
+        assertThat(retriever.search("hello", 5, null)).isEmpty();
     }
 
 }
