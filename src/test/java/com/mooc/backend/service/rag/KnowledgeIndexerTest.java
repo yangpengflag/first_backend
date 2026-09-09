@@ -20,8 +20,10 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -38,15 +41,21 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 索引同步 job 契约（change: ai-rag，tasks 4.x / design.md D5）：按类型分片替换幂等、
- * 空列表也删（无残留）、不可用/redis 故障/开关关闭均跳过且不抛。
+ * 索引同步 job 契约（change: ai-rag，tasks 4.x / design.md D5；增量语义见
+ * change: ai-rag-incremental-sync，design D1–D5）：
+ * 全量兜底按类型分片替换且空列表也删（无残留）；增量只处理变更实体、软删/DRAFT 只删不加、
+ * 失败不推进水位线；不可用/redis 故障/开关关闭均跳过且不抛。
  */
 class KnowledgeIndexerTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Instant WATERMARK = Instant.parse("2025-12-31T00:00:00Z");
+    private static final String WATERMARK_KEY = "ai-rag:index-watermark";
+    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+
     private static final AiRagProperties PROPS = new AiRagProperties(
             true, "localhost", 19530, 1024, "wanderchina-knowledge", 4, 0.0, 1200,
-            "0 0 5 * * *", Duration.ofMinutes(5));
+            "0 0 5,13 * * *", Duration.ofMinutes(5));
 
     private final CityRepository cityRepo = mock(CityRepository.class);
     private final SpotRepository spotRepo = mock(SpotRepository.class);
@@ -59,25 +68,46 @@ class KnowledgeIndexerTest {
     private KnowledgeIndexer indexer(AiRagProperties props) {
         when(redis.opsForValue()).thenReturn(ops);
         when(ops.setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
-        return new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, props, redis);
+        return new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, props, redis, CLOCK);
     }
 
     private void seedRepos(int cityCount, int spotCount, int postCount) {
         List<City> cities = java.util.stream.IntStream.range(0, cityCount)
-                .mapToObj(i -> City.create(UUID.randomUUID(), "City" + i, "城" + i, "city" + i,
-                        null, "A nice city " + i, "Spring", NOW)).toList();
+                .mapToObj(i -> city("city" + i, "City" + i)).toList();
         List<Spot> spots = java.util.stream.IntStream.range(0, spotCount)
-                .mapToObj(i -> Spot.create(UUID.randomUUID(), "city0-spot" + i, "景点" + i, "Spot " + i,
-                        "city0", SpotCategory.NATURE, List.of(), null, null, null, null, null, null, List.of(),
-                        "Summary " + i, null, "Description " + i, null, null, null, null, null,
-                        true, false, SpotStatus.PUBLISHED, NOW)).toList();
+                .mapToObj(i -> spot("city0-spot" + i, "Spot " + i, SpotStatus.PUBLISHED)).toList();
         List<Post> posts = java.util.stream.IntStream.range(0, postCount)
-                .mapToObj(i -> Post.create(UUID.randomUUID(), "T" + i, "Body " + i, null, List.of(),
-                        PostStatus.PUBLISHED, "city0", NOW)).toList();
+                .mapToObj(i -> post("Body " + i, PostStatus.PUBLISHED)).toList();
         when(cityRepo.findByDeletedFalse(any())).thenReturn(new PageImpl<>(cities));
         when(spotRepo.findByStatusAndDeletedFalse(any(), any())).thenReturn(spots);
         when(postRepo.findByStatusAndDeletedFalse(any(), any())).thenReturn(new PageImpl<>(posts));
     }
+
+    /** 增量模式：三类变更集由入参给定，水位线存在（否则走全量）。 */
+    private void seedChanges(List<City> cities, List<Spot> spots, List<Post> posts) {
+        when(ops.get(WATERMARK_KEY)).thenReturn(WATERMARK.toString());
+        when(cityRepo.findByUpdatedAtAfter(WATERMARK)).thenReturn(cities);
+        when(spotRepo.findByUpdatedAtAfter(WATERMARK)).thenReturn(spots);
+        when(postRepo.findByUpdatedAtAfter(WATERMARK)).thenReturn(posts);
+    }
+
+    private static City city(String slug, String name) {
+        return City.create(UUID.randomUUID(), name, name + "中文", slug,
+                null, "A nice city", "Spring", NOW);
+    }
+
+    private static Spot spot(String slug, String name, SpotStatus status) {
+        return Spot.create(UUID.randomUUID(), slug, name + "中文", name,
+                "city0", SpotCategory.NATURE, List.of(), null, null, null, null, null, null, List.of(),
+                "Summary", null, "Description", null, null, null, null, null,
+                true, false, status, NOW);
+    }
+
+    private static Post post(String body, PostStatus status) {
+        return Post.create(UUID.randomUUID(), "T", body, null, List.of(), status, "city0", NOW);
+    }
+
+    // ---------- 全量兜底（既有契约） ----------
 
     @Test
     void replacesEachTypeDeletingBeforeAdding() {
@@ -124,6 +154,84 @@ class KnowledgeIndexerTest {
     }
 
     @Test
+    void firstRunWithoutWatermarkDoesFullRebuildAndSetsWatermark() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        seedRepos(1, 1, 1);
+
+        indexer(PROPS).reindex();
+
+        verify(vs, times(3)).delete(any(Expression.class)); // 三类分片全量替换
+        verify(ops).set(WATERMARK_KEY, NOW.toString());
+    }
+
+    // ---------- 增量（change: ai-rag-incremental-sync） ----------
+
+    @Test
+    void incrementalOnlyTouchesChangedEntities() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        seedChanges(List.of(city("chengdu", "Chengdu")), List.of(), List.of());
+
+        indexer(PROPS).reindex();
+
+        // 只删该城市的来源键、只重写该城市的块；不触发全量扫描
+        verify(vs, times(1)).delete(any(Expression.class));
+        ArgumentCaptor<Expression> filter = ArgumentCaptor.forClass(Expression.class);
+        verify(vs).delete(filter.capture());
+        assertThat(filter.getValue().toString()).contains("city").contains("chengdu");
+        verify(vs, times(1)).add(anyList());
+        verify(cityRepo, never()).findByDeletedFalse(any());
+        verify(spotRepo, never()).findByStatusAndDeletedFalse(any(), any());
+        verify(postRepo, never()).findByStatusAndDeletedFalse(any(), any());
+        verify(ops).set(WATERMARK_KEY, NOW.toString());
+    }
+
+    @Test
+    void deletedAndDraftContentIsPurgedWithoutReadd() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        Post deleted = post("deleted body", PostStatus.PUBLISHED);
+        deleted.softDelete(NOW);
+        seedChanges(List.of(), List.of(), List.of(deleted, post("draft body", PostStatus.DRAFT)));
+
+        indexer(PROPS).reindex();
+
+        verify(vs, times(2)).delete(any(Expression.class)); // 两条变更帖子各删一次
+        verify(vs, never()).add(anyList());                 // 软删 / DRAFT 不重写
+        verify(ops).set(WATERMARK_KEY, NOW.toString());     // 成功即推进
+    }
+
+    @Test
+    void noChangesProducesNoEmbeddingCalls() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        seedChanges(List.of(), List.of(), List.of());
+
+        indexer(PROPS).reindex();
+
+        verify(vs, never()).delete(any(Expression.class));
+        verify(vs, never()).add(anyList());
+        verify(ops).set(WATERMARK_KEY, NOW.toString());
+    }
+
+    @Test
+    void failureDoesNotAdvanceWatermark() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        org.mockito.Mockito.doThrow(new IllegalStateException("vector store down"))
+                .when(vs).add(anyList());
+        seedChanges(List.of(city("chengdu", "Chengdu")), List.of(), List.of());
+
+        indexer(PROPS).reindex();
+
+        verify(vs, times(1)).delete(any(Expression.class));
+        verify(ops, never()).set(eq(WATERMARK_KEY), anyString()); // 失败不推进 → 下轮重放
+    }
+
+    // ---------- 降级与开关（既有契约） ----------
+
+    @Test
     void storeUnavailableSkipsRoundWithoutTouchingRepos() {
         indexer(PROPS);
         when(store.store()).thenReturn(Optional.empty());
@@ -141,18 +249,32 @@ class KnowledgeIndexerTest {
         when(ops.setIfAbsent(anyString(), anyString(), any()))
                 .thenThrow(new DataAccessException("redis down") {
                 });
-        KnowledgeIndexer indexer = new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, PROPS, redis);
+        KnowledgeIndexer indexer = new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, PROPS, redis, CLOCK);
 
         indexer.reindex(); // 不抛
         verifyNoInteractions(store);
     }
 
     @Test
+    void redisFailureWhileReadingWatermarkSkipsRound() {
+        indexer(PROPS);
+        when(store.store()).thenReturn(Optional.of(vs));
+        when(ops.get(WATERMARK_KEY)).thenThrow(new DataAccessException("redis down") {
+        });
+
+        indexer(PROPS).reindex();
+
+        verify(vs, never()).delete(any(Expression.class));
+        verify(vs, never()).add(anyList());
+        verify(ops, never()).set(eq(WATERMARK_KEY), anyString());
+    }
+
+    @Test
     void disabledSwitchDoesNothing() {
         AiRagProperties disabled = new AiRagProperties(
                 false, "localhost", 19530, 1024, "wanderchina-knowledge", 4, 0.0, 1200,
-                "0 0 5 * * *", Duration.ofMinutes(5));
-        KnowledgeIndexer indexer = new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, disabled, redis);
+                "0 0 5,13 * * *", Duration.ofMinutes(5));
+        KnowledgeIndexer indexer = new KnowledgeIndexer(cityRepo, spotRepo, postRepo, store, disabled, redis, CLOCK);
 
         indexer.reindex();
         verifyNoInteractions(redis, store, cityRepo);

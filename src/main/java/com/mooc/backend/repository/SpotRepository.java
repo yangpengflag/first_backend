@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,13 @@ public interface SpotRepository extends JpaRepository<Spot, UUID>, SpotRepositor
 
     /** 全量 PUBLISHED 且未软删（change: ai-rag 知识库索引数据源）。 */
     List<Spot> findByStatusAndDeletedFalse(SpotStatus status, Pageable pageable);
+
+    /**
+     * 增量索引同步（change: ai-rag-incremental-sync）：取 {@code updated_at} 严格晚于水位线的行。
+     * <b>不</b>过滤 {@code deleted} / {@code status}——软删与转 DRAFT 的行必须进入变更集，
+     * 才能清除其既有检索块（否则旧块永久残留，违反"已删内容不再被检索"）。
+     */
+    List<Spot> findByUpdatedAtAfter(Instant updatedAt);
 
     /** 批量按 slug 查（收藏列表用），仅未软删行。 */
     List<Spot> findBySlugInAndDeletedFalse(List<String> slugs);

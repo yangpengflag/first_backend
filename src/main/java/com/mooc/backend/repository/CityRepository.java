@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,4 +25,10 @@ public interface CityRepository extends JpaRepository<City, UUID> {
     Optional<City> findBySlug(String slug);
 
     Page<City> findByDeletedFalse(Pageable pageable);
+
+    /**
+     * 增量索引同步（change: ai-rag-incremental-sync）：取 {@code updated_at} 严格晚于水位线的行。
+     * <b>不</b>过滤 {@code deleted}——软删行必须进入变更集，其既有检索块才能被清除。
+     */
+    List<City> findByUpdatedAtAfter(Instant updatedAt);
 }

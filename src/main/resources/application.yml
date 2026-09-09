@@ -206,8 +206,10 @@ app:
     min-score: 0.0
     # 单块字符上限（切块器用）；知识注入上界 ≈ chunk-max-chars × top-k（~5KB）
     chunk-max-chars: 1200
-    # 知识库重建周期：每日 05:00（错开 chat 清理 04:30 的批次窗口）。多实例用 Redis 锁串行
-    refresh-cron: "0 0 5 * * *"
+    # 知识库同步周期：每日 05:00 + 13:00（change: ai-rag-incremental-sync——增量模式下
+    # 无变更轮次零 embedding 调用，轮次成本近似为零，故可加密到每日两次）。
+    # 多实例用 Redis 锁串行；单轮失败不推进水位线，下轮自动重放变更集
+    refresh-cron: "0 0 5,13 * * *"
     # 重建锁 TTL：单轮重建最坏耗时 << 周期（24h）
     refresh-lock-ttl: 5m
 

@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,4 +35,11 @@ public interface PostRepository extends JpaRepository<Post, UUID>, PostRepositor
 
     /** 某作者未软删的帖子总数（offset 分页 total 用）。 */
     long countByAuthorIdAndDeletedFalse(UUID authorId);
+
+    /**
+     * 增量索引同步（change: ai-rag-incremental-sync）：取 {@code updated_at} 严格晚于水位线的行。
+     * <b>不</b>过滤 {@code deleted} / {@code status}——软删与转 DRAFT 的帖子必须进入变更集，
+     * 才能清除其既有检索块（否则旧块永久残留，违反"已删内容不再被检索"）。
+     */
+    List<Post> findByUpdatedAtAfter(Instant updatedAt);
 }

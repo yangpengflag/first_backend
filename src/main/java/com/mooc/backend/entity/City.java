@@ -16,6 +16,11 @@ import java.util.UUID;
  * {@code spots.city_slug} 与路由 {@code /cities/{slug}} 依赖它，作为不透明键使用。
  * {@code description} 为单字段描述（不区分语言，用户/数据源输入什么即存什么）。
  * {@code spotCount} 为聚合查询产物，不冗余存储，由列表/详情组装时实时计算。
+ *
+ * <p><b>增量索引同步注意</b>（change: ai-rag-incremental-sync）：本实体当前没有任何编辑 /
+ * 软删方法（种子数据，{@code updated_at} 实际不变）。将来若开放城市编辑，必须像
+ * {@code Post} / {@code Spot} 一样在变更后调用 {@code touch(now)} 刷新 {@code updated_at}——
+ * 否则 {@code updated_at} 水位线抓不到该变更，向量库里的城市块将长期过期（直至全量兜底）。
  */
 @Entity
 @Table(name = "cities")
