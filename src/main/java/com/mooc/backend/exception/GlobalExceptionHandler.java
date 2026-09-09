@@ -67,6 +67,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), ex.getDetails()));
     }
 
+    /** 搜索域（change: ai-semantic-search）：q 校验失败 → 400，限流 → 429。 */
+    @ExceptionHandler(SearchException.class)
+    public ResponseEntity<ErrorResponse> handleSearchException(SearchException ex) {
+        return ResponseEntity.status(ex.getErrorCode().getStatus())
+                .body(ErrorResponse.of(ex.getErrorCode(), ex.getMessage(), null));
+    }
+
     /** 参数校验失败：details 为逐字段的违规说明数组。 */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {

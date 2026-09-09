@@ -98,6 +98,8 @@ public class SecurityConfig {
                         // 城市 / 景点公开读端点（列表 / 详情）免鉴权（change: api-spots）
                         .requestMatchers(HttpMethod.GET, "/api/cities").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cities/*").permitAll()
+                        // 混合搜索公开端点（change: ai-semantic-search）
+                        .requestMatchers(HttpMethod.GET, "/api/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/spots").permitAll()
                         // 景点收藏状态查询需鉴权：精确路径须排在下方 GET /api/spots/* 公开读通配之前
                         .requestMatchers(HttpMethod.GET, "/api/spots/*/bookmark").authenticated()

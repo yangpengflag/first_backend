@@ -61,8 +61,18 @@ class PostsControllerIntegrationTest {
     private String tokenA;
     private UUID authorA;
 
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
     @BeforeEach
     void setUp() {
+        // 本测试多处断言公开列表 total 的绝对值（0/1），对真实库中的存量 PUBLISHED 行脆弱
+        // （此前被手工演示帖击穿）。照 PostRepositoryTest 惯例在事务内清表，结束自动回滚。
+        entityManager.createNativeQuery("DELETE FROM votes").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM bookmarks").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM comments").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM post_spots").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM posts").executeUpdate();
         tokenA = activatedUser(EMAIL_A, "Alice");
         authorA = userRepository.findByEmail(EMAIL_A).orElseThrow().getId();
     }

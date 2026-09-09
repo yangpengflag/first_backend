@@ -1,5 +1,7 @@
 package com.mooc.backend.config;
 
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
 /**
  * 混合搜索配置（change: ai-semantic-search，design.md D5/D6）。前缀 {@code app.search}，
  * 默认值写在 application.yml（本 record 不设默认，与 AiRagProperties 同约定）。
@@ -8,6 +10,7 @@ package com.mooc.backend.config;
  * @param rateLimitEnabled  IP 维度限流开关（本地开发可关闭，零摩擦）
  * @param rateLimitPerMinute 单 IP 每分钟允许的搜索次数
  */
+@ConfigurationProperties(prefix = "app.search")
 public record SearchProperties(
         int vectorTopK,
         boolean rateLimitEnabled,
