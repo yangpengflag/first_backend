@@ -213,6 +213,17 @@ app:
     # 重建锁 TTL：单轮重建最坏耗时 << 周期（24h）
     refresh-lock-ttl: 5m
 
+  # 混合搜索（change: ai-semantic-search）。向量腿每查询消耗一次 DashScope embedding
+  # （text-embedding-v3），靠 vector-top-k 与 IP 限流收口成本；关键词腿查本地 MySQL 无外部配额。
+  # 降级语义：Milvus 不可用 / ai-rag 关闭时自动退纯关键词，恒 200（fail-open）。
+  search:
+    # 向量腿每次检索条数（上限受 limit 钳制 20）
+    vector-top-k: 20
+    # IP 维度限流开关（本地开发可关闭零摩擦）
+    rate-limit-enabled: true
+    # 单 IP 每分钟允许的搜索次数
+    rate-limit-per-minute: 30
+
 auth:
   jwt:
     # HS256 要求密钥 >= 32 字节；生产环境必须通过 JWT_SECRET 环境变量注入
