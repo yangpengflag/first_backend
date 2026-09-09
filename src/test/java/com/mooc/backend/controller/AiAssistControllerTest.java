@@ -170,14 +170,33 @@ class AiAssistControllerTest {
     // ---- 校验 422 ----
 
     @Test
-    void shortContentYields422Validation() throws Exception {
+    void shortTitleContentYields422WithKindMessage() throws Exception {
         allowRateLimit();
+        when(aiAssistService.suggest(any(), any(), any()))
+                .thenThrow(new AiAssistValidationException(
+                        "Content for Title must be at least 5 characters."));
         mockMvc.perform(post("/api/ai/posts/assist")
                         .header(AUTH_HEADER, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"kind\":\"title\",\"content\":\"too short\"}"))
+                        .content("{\"kind\":\"title\",\"content\":\"abc\"}"))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.message").value("Content for Title must be at least 5 characters."));
+    }
+
+    @Test
+    void shortPolishContentYields422WithKindMessage() throws Exception {
+        allowRateLimit();
+        when(aiAssistService.suggest(any(), any(), any()))
+                .thenThrow(new AiAssistValidationException(
+                        "Content for Polish must be at least 20 characters."));
+        mockMvc.perform(post("/api/ai/posts/assist")
+                        .header(AUTH_HEADER, USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"polish\",\"content\":\"short draft here\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.message").value("Content for Polish must be at least 20 characters."));
     }
 
     @Test

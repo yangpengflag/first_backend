@@ -54,6 +54,13 @@ public class AiAssistService {
      * @return 仅对应 kind 字段非空的 {@link AiAssistSuggestion}
      */
     public AiAssistSuggestion suggest(AiAssistRequest.Kind kind, String title, String content) {
+        // 分档最短正文长度：tags 仅需非空、title ≥ 5、polish ≥ 20（见 ai-post-assist spec）。
+        // DTO 仅保证非空（@NotBlank + min=1）；随 kind 变化的最短长度在此按 kind 判定。
+        int min = minContentFor(kind);
+        if (content == null || content.trim().length() < min) {
+            throw new AiAssistValidationException(minContentMessage(kind, min));
+        }
+
         // polish 超长 → 拒绝（绝不截断，避免静默删除用户未润色的部分）。
         if (kind == AiAssistRequest.Kind.polish && content.length() > properties.polishMaxChars()) {
             throw new AiAssistValidationException(
@@ -83,6 +90,24 @@ public class AiAssistService {
             case tags -> new AiAssistSuggestion(null, emptyToNullList(parseAndNormalizeTags(raw)), null);
             case polish -> new AiAssistSuggestion(null, null, emptyToNull(cleanPolish(raw)));
         };
+    }
+
+    /** 分档最短正文长度：tags ≥ 1 / title ≥ 5 / polish ≥ 20（常量，非配置项）。 */
+    private static int minContentFor(AiAssistRequest.Kind kind) {
+        return switch (kind) {
+            case tags -> 1;
+            case title -> 5;
+            case polish -> 20;
+        };
+    }
+
+    private static String minContentMessage(AiAssistRequest.Kind kind, int min) {
+        String label = switch (kind) {
+            case tags -> "Tags";
+            case title -> "Title";
+            case polish -> "Polish";
+        };
+        return "Content for " + label + " must be at least " + min + " character" + (min == 1 ? "" : "s") + ".";
     }
 
     private String systemPromptFor(AiAssistRequest.Kind kind) {

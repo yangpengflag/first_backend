@@ -205,6 +205,42 @@ class AiAssistServiceTest {
         assertThat(reparsed).isEqualTo(s.tags());
     }
 
+    // ---- 分档最短正文长度（ai-post-assist-relax-min-length）----
+
+    @Test
+    void tagsAcceptVeryShortContent() {
+        Fake gen = new Fake("[\"trip\"]");
+        AiAssistSuggestion s = serviceWith(gen).suggest(AiAssistRequest.Kind.tags, null, "abc");
+        assertThat(s.tags()).containsExactly("trip");
+    }
+
+    @Test
+    void titleShorterThanFiveCharsIsRejected() {
+        Fake gen = new Fake("ignored");
+        assertThatThrownBy(() -> serviceWith(gen).suggest(AiAssistRequest.Kind.title, null, "abc"))
+                .isInstanceOf(AiAssistValidationException.class)
+                .hasMessageContaining("Title")
+                .hasMessageContaining("5");
+    }
+
+    @Test
+    void polishShorterThanTwentyCharsIsRejected() {
+        Fake gen = new Fake("ignored");
+        assertThatThrownBy(() -> serviceWith(gen).suggest(AiAssistRequest.Kind.polish, null, "x".repeat(10)))
+                .isInstanceOf(AiAssistValidationException.class)
+                .hasMessageContaining("Polish")
+                .hasMessageContaining("20");
+    }
+
+    @Test
+    void blankContentIsRejectedForEveryKind() {
+        Fake gen = new Fake("ignored");
+        for (AiAssistRequest.Kind kind : AiAssistRequest.Kind.values()) {
+            assertThatThrownBy(() -> serviceWith(gen).suggest(kind, null, "   "))
+                    .isInstanceOf(AiAssistValidationException.class);
+        }
+    }
+
     // ---- helpers ----
 
     private static String content() {
