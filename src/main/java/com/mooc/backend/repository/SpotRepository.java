@@ -39,6 +39,9 @@ public interface SpotRepository extends JpaRepository<Spot, UUID>, SpotRepositor
     /** 城市详情 / 列表项 spotCount（仅 PUBLISHED）。 */
     long countByCitySlugAndStatusAndDeletedFalse(String citySlug, SpotStatus status);
 
+    /** 全量 PUBLISHED 且未软删（change: ai-rag 知识库索引数据源）。 */
+    List<Spot> findByStatusAndDeletedFalse(SpotStatus status, Pageable pageable);
+
     /** 批量按 slug 查（收藏列表用），仅未软删行。 */
     List<Spot> findBySlugInAndDeletedFalse(List<String> slugs);
 

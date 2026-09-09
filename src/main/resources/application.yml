@@ -89,16 +89,23 @@ spring:
         annotation-scanner:
           enabled: false
 
-    # Chat 模型接入（change: ai-chat-core）：DeepSeek 走 OpenAI 兼容协议。
+    # Chat/Embedding 模型接入（change: ai-rag 切供）：阿里云 DashScope OpenAI 兼容端点
+    # （compatible-mode）。spike 实证（2026-09-08）：/chat/completions（qwen-plus）、
+    # /embeddings（text-embedding-v3，1024 维）、function calling（tools 参数）三条红线全绿。
+    # 键名沿用 spring.ai.openai.*（spring-ai-starter-model-openai 的既有锚点前缀，AiChatConfig
+    # 与后续 RAG 自装 embedding 均读此键位，重命名成本 > 收益）；值是 DashScope，勿与 OpenAI 混淆。
+    # base-url 不带 /v1：spring-ai 的 OpenAiApi 会在其后自动追加 /v1，带 /v1 会拼出
+    # /v1/v1/chat/completions（404 实测）——设到 compatible-mode 根即可得到
+    # .../compatible-mode/v1/chat/completions 与 /embeddings。
     # api-key 仅经环境变量注入，空值 = 哨兵——auto-config 必须优雅跳过（fail-closed），
     # 未装配时对话端点返回显式降级而非 5xx/启动失败（见 design.md D2，spike 1.1 实测）。
     # 凭据属敏感信息，禁止写进本文件或提交仓库。
     openai:
-      base-url: https://api.deepseek.com
-      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: ${DASHSCOPE_API_KEY:}
       chat:
         options:
-          model: deepseek-chat
+          model: qwen-plus
 
 server:
   port: 8080
@@ -161,6 +168,48 @@ app:
     rate-limit:
       per-ip-per-minute: 10
       per-session-per-minute: 20
+
+  # 写作辅助（change: ai-post-assist）。复用 app.ai-chat.enabled 作 AI 总开关（不新增哨兵）。
+  # 仅承载「辅助」相关的输入上限 / 限流 / 超时；超时只约束 assist 的同步 RestClient，
+  # 不影响 SSE 对话（对话上界已由 controller 的 90s/120s 承担）。
+  ai-assist:
+    # title / tags 的 content 截断上限：超出只损失建议质量，不损失数据（不拒绝）
+    max-input-chars: 12000
+    # polish 的 content 拒绝阈值：超出直接 422 拒绝、绝不截断（截断等同静默删稿）
+    polish-max-chars: 8000
+    # 标题裁剪上限，对齐 Post.title
+    title-max-chars: 200
+    # 双维限流（IP 维 + 用户维），复用 auth.ratelimit.RateLimiter 的滑动窗口
+    rate-limit:
+      per-ip-per-minute: 20
+      per-user-per-minute: 10
+    # 同步 RestClient 超时（仅 assist 同步调用生效）
+    timeout:
+      connect-ms: 5000
+      read-ms: 30000
+
+  # AI 助手 RAG 知识库（change: ai-rag，向量库现为 Milvus）。叠加能力：enabled=false = 停用 kill switch
+  # （对话照常、无知识注入）；装配还取决于 DashScope api-key 非空（与 ai-chat 同 key）。
+  # Milvus Standalone 为进程外向量库（gRPC :19530，本地需起服：docker compose up -d，
+  # etcd + minio + milvus 三件套见根仓 docker-compose.yml）；宕机只降级（无知识注入），不崩不悬挂（惰性句柄）。
+  ai-rag:
+    enabled: true
+    milvus-host: ${MILVUS_HOST:localhost}
+    milvus-port: ${MILVUS_PORT:19530}
+    # 集合维度必须与 embedding 模型绑定：DashScope text-embedding-v3 = 1024 维。
+    # Milvus 建集合时 schema 固定，缺省会走客户端 1536 兜底建错——不得删除此键。
+    embedding-dimension: 1024
+    collection-name: wanderchina_knowledge
+    # 每轮检索取相似度最高 top-k 条；min-score 默认 0：语料百篇级不设阈值
+    # （低相似度靠模型判断过滤），避免阈值误杀召回
+    top-k: 4
+    min-score: 0.0
+    # 单块字符上限（切块器用）；知识注入上界 ≈ chunk-max-chars × top-k（~5KB）
+    chunk-max-chars: 1200
+    # 知识库重建周期：每日 05:00（错开 chat 清理 04:30 的批次窗口）。多实例用 Redis 锁串行
+    refresh-cron: "0 0 5 * * *"
+    # 重建锁 TTL：单轮重建最坏耗时 << 周期（24h）
+    refresh-lock-ttl: 5m
 
 auth:
   jwt:

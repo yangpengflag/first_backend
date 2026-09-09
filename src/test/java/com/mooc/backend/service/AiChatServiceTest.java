@@ -3,14 +3,17 @@ import com.mooc.backend.service.AiChatService;
 import com.mooc.backend.service.ChatSessionService;
 
 import com.mooc.backend.exception.AiChatUnavailableException;
+import com.mooc.backend.service.rag.KnowledgeRetriever;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,8 +38,17 @@ class AiChatServiceTest {
         return provider;
     }
 
+    /** 工具提供者缺省场景（change: ai-spot-tools D1）：空流 = 本轮不挂任何工具。 */
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<ToolCallbackProvider> noTools() {
+        ObjectProvider<ToolCallbackProvider> provider = mock(ObjectProvider.class);
+        when(provider.orderedStream()).thenReturn(Stream.empty());
+        return provider;
+    }
+
     private AiChatService service(ObjectProvider<ChatClient> provider) {
-        return new AiChatService(provider, mock(ChatSessionService.class), FIXED);
+        return new AiChatService(provider, noTools(), mock(ChatSessionService.class),
+                mock(KnowledgeRetriever.class), FIXED);
     }
 
     @Test

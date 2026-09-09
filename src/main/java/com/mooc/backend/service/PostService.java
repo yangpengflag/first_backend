@@ -256,8 +256,14 @@ public class PostService {
         }
     }
 
-    /** tag 归一化：trim + 小写 + 去空 + 去重 + 上限 10（与入参校验双保险）。 */
-    private List<String> normalizeTags(List<String> tags) {
+    /**
+     * tag 归一化：trim + 小写 + 去空 + 去超长(≤30) + 去重 + 上限 10。
+     *
+     * <p>与入参校验（{@code CreatePostRequest} 的 {@code @Size(max=30)}）双保险，且口径与
+     * {@code AiAssistService} 的标签归一化逐字一致（change: ai-post-assist，tasks 2.3 对拍）。
+     * 改为 package-private static 以便写作辅助对拍测试直接调用，行为不变。
+     */
+    static List<String> normalizeTags(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return List.of();
         }
@@ -265,6 +271,7 @@ public class PostService {
                 .filter(Objects::nonNull)
                 .map(t -> t.trim().toLowerCase(Locale.ROOT))
                 .filter(t -> !t.isEmpty())
+                .filter(t -> t.length() <= 30)
                 .distinct()
                 .limit(10)
                 .toList();

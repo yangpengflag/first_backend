@@ -102,13 +102,21 @@
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
 		</dependency>
-		<!-- Chat 模型接入（change: ai-chat-core）：OpenAI 兼容协议，经 base-url 指向
-		     DeepSeek（国内可直连、无代理依赖）。api-key 为空时依赖自动配置须优雅跳过
-		     （fail-closed，spike 1.1 验证）——若空 key 导致 context 启动失败，则须用
-		     spring.ai.model.chat=none 关闭 auto-config 后自装配（见 design.md D2）。 -->
+		<!-- Chat/Embedding 模型接入（change: ai-rag 切供）：OpenAI 兼容协议，经 base-url 指向
+		     DashScope compatible-mode（qwen-plus / text-embedding-v3，真机 spike 2026-09-08 通过）。
+		     api-key 为空时依赖自动配置须优雅跳过（fail-closed，spike 1.1 验证）——空 key 会致
+		     context 启动失败，故 application.yml 已将六类 spring.ai.model.*=none 关 auto-config，
+		     由 AiChatConfig（chat）与 RAG 自装 embedding 在 key 非空时显式自装配。 -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+		<!-- 向量库（change: ai-rag-milvus，自 ai-rag 的 Chroma 切换）：Milvus 进程外服务（gRPC :19530），
+		     spring-ai 官方 store 模块（内含 io.milvus SDK 传递依赖，勿单独声明）。
+		     连接经惰性句柄，宕机只降级不崩；维度须显式（embeddingDimension，DashScope 1024 维）。 -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-milvus-store</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -148,6 +156,9 @@
 						<!-- AI 助手（change: ai-chat-core）：测试固定禁能，避免任何测试装配真实模型调用。
 						     需要装配行为的用例用 @TestPropertySource 显式覆盖。 -->
 						<app.ai-chat.enabled>false</app.ai-chat.enabled>
+						<!-- AI 助手 RAG（change: ai-rag，向量库现为 Milvus）：测试固定禁能，避免任何测试
+						     装配 embedding / 向量库（零出网、零向量库）。装配类用例用 @TestPropertySource 显式覆盖。 -->
+						<app.ai-rag.enabled>false</app.ai-rag.enabled>
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>

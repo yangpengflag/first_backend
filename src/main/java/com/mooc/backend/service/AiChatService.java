@@ -2,6 +2,7 @@ package com.mooc.backend.service;
 
 import com.mooc.backend.entity.ChatMessage;
 import com.mooc.backend.entity.ChatSession;
+import com.mooc.backend.service.rag.KnowledgeRetriever;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -31,8 +34,12 @@ import java.util.List;
  * + {@code .messages(...)} 组 prompt → {@code .stream().content()} 增量流出 →
  * 流完成后把完整 assistant 回答落库；流异常则不落 assistant、错误上抛（错误事件由上层发）。
  *
- * <p>工具已在装配期经 {@code defaultToolCallbacks} 挂到 ChatClient（天气/汇率，
- * 定义一次、同 JVM 直调），本类零额外接线。时间由 {@code Clock} 注入便于测试。
+ * <p>工具（天气 / 汇率 / 景点）由本类在<b>每轮请求</b>上挂载：{@code ObjectProvider<ToolCallbackProvider>}
+ * 经 {@code orderedStream()} 收集全部提供者（零 bean → 空流，多 bean → 全收），再
+ * {@code toolCallbacks(providers)} 传入（change: ai-spot-tools D1）。工具仍在各自的
+ * {@code @Tool} 上定义一次、同 JVM 零传输直调；改为按请求挂载是为了让多个工具提供者可以共存
+ * （挂在 client 级默认会让第二个 Provider 直接把 context 搞挂，见 design.md D1 spike）。
+ * 时间由 {@code Clock} 注入便于测试。
  */
 @Service
 public class AiChatService {
@@ -40,14 +47,20 @@ public class AiChatService {
     private static final Logger log = LoggerFactory.getLogger(AiChatService.class);
 
     private final ObjectProvider<ChatClient> chatClientProvider;
+    private final ObjectProvider<ToolCallbackProvider> toolCallbackProviders;
     private final ChatSessionService chatSessionService;
+    private final KnowledgeRetriever knowledgeRetriever;
     private final Clock clock;
 
     public AiChatService(ObjectProvider<ChatClient> chatClientProvider,
+                         ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
                          ChatSessionService chatSessionService,
+                         KnowledgeRetriever knowledgeRetriever,
                          Clock clock) {
         this.chatClientProvider = chatClientProvider;
+        this.toolCallbackProviders = toolCallbackProviders;
         this.chatSessionService = chatSessionService;
+        this.knowledgeRetriever = knowledgeRetriever;
         this.clock = clock;
     }
 
@@ -76,10 +89,22 @@ public class AiChatService {
         List<Message> history = toSpringMessages(
                 chatSessionService.loadRecentMessages(session, chatSessionService.contextWindow()));
 
+        // RAG 检索（change: ai-rag）：以本轮 message 为查询；命中注入 knowledge section，
+        // 不可用/无命中 → 空列表 → system 仅 persona + 引用规则。检索失败静默降级不抛。
+        List<Document> knowledge = knowledgeRetriever.search(message);
+        String system = AiPrompts.buildSystemPrompt(knowledge);
+
         StringBuilder assistantSink = new StringBuilder();
-        return client.prompt()
-                .system(AiPrompts.SYSTEM_PROMPT)
-                .messages(history)
+        ChatClient.ChatClientRequestSpec request = client.prompt()
+                .system(system)
+                .messages(history);
+        // 每轮挂载全部工具（零提供者时不调用，避免把空数组发到上游）
+        ToolCallbackProvider[] tools = toolCallbackProviders.orderedStream()
+                .toArray(ToolCallbackProvider[]::new);
+        if (tools.length > 0) {
+            request = request.toolCallbacks(tools);
+        }
+        return request
                 .stream()
                 .content()
                 .doOnNext(assistantSink::append)

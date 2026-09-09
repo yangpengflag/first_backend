@@ -5,8 +5,6 @@ import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
@@ -15,9 +13,13 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.retry.support.RetryTemplate;
+import org.springframework.web.client.RestClient;
 
 import io.micrometer.observation.ObservationRegistry;
+
+import java.time.Duration;
 
 /**
  * AI 助手装配（change: ai-chat-core）。
@@ -33,20 +35,46 @@ import io.micrometer.observation.ObservationRegistry;
  * {@code ObjectProvider} 感知未装配。
  */
 @Configuration
-@EnableConfigurationProperties(AiChatProperties.class)
+@EnableConfigurationProperties({AiChatProperties.class, AiAssistProperties.class})
 public class AiChatConfig {
 
+    /**
+     * 对话客户端（change: ai-spot-tools，D1 改造）。
+     *
+     * <p><b>工具不再挂在这里</b>：此前用 {@code defaultToolCallbacks(provider)} 把唯一的
+     * {@code MethodToolCallbackProvider} 挂成 client 级默认，其代价是——一旦注册第二个 Provider，
+     * {@code ObjectProvider#getIfAvailable()} 会因多候选抛 {@code NoUniqueBeanDefinitionException}
+     * 让本 bean 创建失败、context fail-START（spike 实证见 design.md D1）。工具改由
+     * {@code AiChatService} 在每轮请求上挂载（{@code toolCallbacks(ToolCallbackProvider...)}），
+     * 于是：多 Provider 可共存、无 Provider 时对话照常、且写作辅助类请求天然不带工具。
+     */
     @Bean
     @Conditional(AiChatEnabledCondition.class)
-    ChatClient aiChatClient(Environment env,
-                            ObjectProvider<MethodToolCallbackProvider> toolCallbackProviders) {
-        String baseUrl = env.getProperty("spring.ai.openai.base-url", "https://api.deepseek.com");
+    ChatClient aiChatClient(Environment env, AiAssistProperties aiAssistProperties) {
+        String baseUrl = env.getProperty("spring.ai.openai.base-url",
+                "https://dashscope.aliyuncs.com/compatible-mode");
         String apiKey = env.getProperty("spring.ai.openai.api-key", "");
-        String model = env.getProperty("spring.ai.openai.chat.options.model", "deepseek-chat");
+        String model = env.getProperty("spring.ai.openai.chat.options.model", "qwen-plus");
+
+        // 同步调用超时（change: ai-post-assist，tasks 1.3 / design.md D5）：仅约束 assist 走的
+        // 同步 RestClient（OpenAiApi.chatCompletionEntity），不影响 SSE 对话（流式走 WebClient，
+        // 上界由 controller 既有的 UPSTREAM_TIMEOUT(90s) + EMITTER_TIMEOUT(120s) 承担）。
+        // RestClient.Builder 无 connect/read 超时便捷方法，需经 requestFactory 注入带超时的
+        // SimpleClientHttpRequestFactory。
+        // 若未显式配置 app.ai-assist.timeout.*，回退到 design D5 默认值，避免 timeout() 为 null 时 NPE
+        // （部分测试上下文不绑定 ai-assist 配置）。
+        AiAssistProperties.Timeout timeout = aiAssistProperties.timeout();
+        int connectMs = timeout != null ? timeout.connectMs() : 5000;
+        int readMs = timeout != null ? timeout.readMs() : 30000;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofMillis(connectMs));
+        requestFactory.setReadTimeout(Duration.ofMillis(readMs));
+        RestClient.Builder restBuilder = RestClient.builder().requestFactory(requestFactory);
 
         OpenAiApi api = OpenAiApi.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
+                .restClientBuilder(restBuilder)
                 .build();
 
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
@@ -57,14 +85,7 @@ public class AiChatConfig {
                 .observationRegistry(ObservationRegistry.create())
                 .build();
 
-        ChatClient.Builder builder = ChatClient.builder(chatModel);
-        // travel-services 已把天气/汇率两个 @Tool 以 MethodToolCallbackProvider 注册，
-        // 同 JVM 零接线即获得工具（定义一次，travel spec 契约）。
-        MethodToolCallbackProvider toolProvider = toolCallbackProviders.getIfAvailable();
-        if (toolProvider != null) {
-            builder.defaultToolCallbacks(toolProvider);
-        }
-        return builder.build();
+        return ChatClient.builder(chatModel).build();
     }
 
     /**

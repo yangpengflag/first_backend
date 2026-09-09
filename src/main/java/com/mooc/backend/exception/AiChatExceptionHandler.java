@@ -1,7 +1,9 @@
 package com.mooc.backend.exception;
 
+import com.mooc.backend.controller.AiAssistController;
 import com.mooc.backend.controller.AiChatController;
 import com.mooc.backend.dto.response.ErrorResponse;
+import com.mooc.backend.exception.AiAssistValidationException;
 import com.mooc.backend.exception.ErrorCode;
 
 import org.springframework.core.Ordered;
@@ -29,7 +31,7 @@ import java.util.List;
  * </ul>
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = AiChatController.class)
+@RestControllerAdvice(assignableTypes = {AiChatController.class, AiAssistController.class})
 public class AiChatExceptionHandler {
 
     @ExceptionHandler(AiChatUnavailableException.class)
@@ -42,6 +44,17 @@ public class AiChatExceptionHandler {
     public ResponseEntity<ErrorResponse> handleRateLimited(AiChatRateLimitedException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(ErrorResponse.of(ErrorCode.RATE_LIMITED));
+    }
+
+    /**
+     * 写作辅助业务校验（polish 超长等，依赖 kind、静态 {@code @Size} 无法表达）：
+     * 统一转 <b>422</b> {@code VALIDATION_FAILED}（与同族 {@code /api/ai/chat} 的校验语义一致，
+     * 不复用 {@link PostException} 以免落到 400）。
+     */
+    @ExceptionHandler(AiAssistValidationException.class)
+    public ResponseEntity<ErrorResponse> handleAiAssistValidation(AiAssistValidationException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ErrorResponse.of(ErrorCode.VALIDATION_FAILED, ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

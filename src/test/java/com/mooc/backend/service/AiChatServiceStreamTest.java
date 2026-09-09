@@ -2,6 +2,7 @@ package com.mooc.backend.service;
 import com.mooc.backend.service.AiChatService;
 import com.mooc.backend.service.AiPrompts;
 import com.mooc.backend.service.ChatSessionService;
+import com.mooc.backend.service.rag.KnowledgeRetriever;
 
 import com.mooc.backend.entity.ChatMessage;
 import com.mooc.backend.entity.ChatMessageRole;
@@ -14,6 +15,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 
 import reactor.core.publisher.Flux;
@@ -22,6 +25,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,16 +50,21 @@ class AiChatServiceStreamTest {
     private static final String SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
     private ChatSessionService sessionService;
+    private KnowledgeRetriever retriever;
     private ChatClient client;
     private ChatClient.ChatClientRequestSpec requestSpec;
     private ChatClient.StreamResponseSpec streamSpec;
     private ChatSession session;
     private ArgumentCaptor<List<Message>> messagesCaptor;
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<ToolCallbackProvider> toolProviders = mock(ObjectProvider.class);
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         sessionService = mock(ChatSessionService.class);
+        retriever = mock(KnowledgeRetriever.class);
+        when(retriever.search(anyString())).thenReturn(List.of());
         client = mock(ChatClient.class);
         requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         streamSpec = mock(ChatClient.StreamResponseSpec.class);
@@ -62,9 +72,12 @@ class AiChatServiceStreamTest {
 
         session = ChatSession.create(SESSION_ID, null, Instant.now());
 
+        when(toolProviders.orderedStream()).thenReturn(Stream.empty());
+
         when(client.prompt()).thenReturn(requestSpec);
         when(requestSpec.messages(anyList())).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);
+        when(requestSpec.toolCallbacks(any(ToolCallbackProvider[].class))).thenReturn(requestSpec);
         when(requestSpec.stream()).thenReturn(streamSpec);
 
         when(sessionService.contextWindow()).thenReturn(20);
@@ -73,7 +86,12 @@ class AiChatServiceStreamTest {
     private AiChatService service() {
         ObjectProvider<ChatClient> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(client);
-        return new AiChatService(provider, sessionService, FIXED);
+        return new AiChatService(provider, toolProviders, sessionService, retriever, FIXED);
+    }
+
+    /** 把工具提供者换成给定集合，用于断言「每轮挂载」（change: ai-spot-tools D1）。 */
+    private void withToolProviders(ToolCallbackProvider... providers) {
+        when(toolProviders.orderedStream()).thenReturn(Stream.of(providers));
     }
 
     private static ChatMessage message(ChatMessageRole role, String content) {
@@ -110,7 +128,36 @@ class AiChatServiceStreamTest {
         assertThat(sent.get(2)).isInstanceOf(UserMessage.class);
         assertThat(sent.get(2).getText()).isEqualTo("What about pandas there?");
         assertThat(answer).isEqualTo("Sure, pandas!");
-        verify(requestSpec).system(AiPrompts.SYSTEM_PROMPT);
+        ArgumentCaptor<String> systemCaptor = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemCaptor.capture());
+        String system = systemCaptor.getValue();
+        // 无检索命中：system = persona + 引用规则，逐字以 persona 开头、不含 knowledge section
+        assertThat(system).startsWith(AiPrompts.PERSONA_PROMPT);
+        assertThat(system).contains(AiPrompts.CITATION_RULES);
+        assertThat(system).doesNotContain("# WanderChina site knowledge");
+    }
+
+    @Test
+    void retrievedKnowledgeIsInjectedAsSeparateSectionWithoutRewritingPersona() {
+        persistUserAndHistory("hi", "ok", "What to see near the base?");
+        when(streamSpec.content()).thenReturn(Flux.just("Pandas"));
+        Document hit = new Document("spot:chengdu-giant-panda-base:0",
+                "Giant Panda Base opens 07:30 and is home to red pandas.",
+                Map.of("type", "spot", "nameEn", "Giant Panda Base",
+                        "url", "/spots/chengdu-giant-panda-base"));
+        when(retriever.search("What to see near the base?")).thenReturn(List.of(hit));
+
+        AiChatService service = service();
+        service.stream(SESSION_ID, "What to see near the base?").blockLast();
+
+        ArgumentCaptor<String> systemCaptor = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemCaptor.capture());
+        String system = systemCaptor.getValue();
+        assertThat(system).startsWith(AiPrompts.PERSONA_PROMPT);
+        assertThat(system).contains("# WanderChina site knowledge");
+        assertThat(system).contains("1. Giant Panda Base (/spots/chengdu-giant-panda-base)");
+        assertThat(system).contains("opens 07:30");
+        assertThat(system).contains("Do not fabricate sources");
     }
 
     @Test
@@ -155,5 +202,32 @@ class AiChatServiceStreamTest {
 
         verify(sessionService).appendUserMessage(eq(session), eq("will fail"), any());
         verify(sessionService, never()).appendAssistantMessage(any(), any(), any());
+    }
+
+    @Test
+    void allToolProvidersAreMountedOnEveryRequest() {
+        persistUserAndHistory("hi", "hello", "any hidden gems?");
+        when(streamSpec.content()).thenReturn(Flux.just("yes"));
+        ToolCallbackProvider travel = mock(ToolCallbackProvider.class);
+        ToolCallbackProvider spots = mock(ToolCallbackProvider.class);
+        withToolProviders(travel, spots);
+
+        service().stream(SESSION_ID, "any hidden gems?").blockLast();
+
+        // D1：多个工具提供者必须全部进入本轮请求（此前挂 client 级默认会导致 context 起不来）
+        ArgumentCaptor<ToolCallbackProvider[]> captor =
+                ArgumentCaptor.forClass(ToolCallbackProvider[].class);
+        verify(requestSpec).toolCallbacks(captor.capture());
+        assertThat(captor.getValue()).containsExactly(travel, spots);
+    }
+
+    @Test
+    void toolCallbacksAreSkippedWhenNoProviderRegistered() {
+        persistUserAndHistory("hi", "hello", "hello again");
+        when(streamSpec.content()).thenReturn(Flux.just("hi"));
+
+        service().stream(SESSION_ID, "hello again").blockLast();
+
+        verify(requestSpec, never()).toolCallbacks(any(ToolCallbackProvider[].class));
     }
 }

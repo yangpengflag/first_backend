@@ -4,9 +4,11 @@ import com.mooc.backend.BackendApplication;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,7 +28,7 @@ class AiChatConfigWithKeyTest {
 
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @org.springframework.beans.factory.annotation.Autowired
-    ObjectProvider<MethodToolCallbackProvider> toolProviders;
+    ObjectProvider<ToolCallbackProvider> toolProviders;
 
     @Test
     void chatClientBeanIsPresentWhenApiKeySet() {
@@ -35,9 +37,14 @@ class AiChatConfigWithKeyTest {
 
     @Test
     void travelToolCallbacksAreAvailableForTheChatClient() {
-        // R6：工具定义一次、同 JVM 直调。provider bean 必须存在且带 weather/rates 两个 @Tool
-        MethodToolCallbackProvider provider = toolProviders.getIfAvailable();
-        assertThat(provider).isNotNull();
-        assertThat(provider.getToolCallbacks()).hasSizeGreaterThanOrEqualTo(2);
+        // R6：工具定义一次、同 JVM 直调。工具提供者必须存在且至少带 weather/rates 两个 @Tool。
+        // change: ai-spot-tools D1 —— 改用 orderedStream()：多提供者共存时 getIfAvailable()
+        // 会因多候选抛 NoUniqueBeanDefinitionException（spike 实证，见 design.md D1）。
+        List<ToolCallbackProvider> providers = toolProviders.orderedStream().toList();
+        assertThat(providers).isNotEmpty();
+        long tools = providers.stream()
+                .mapToLong(p -> p.getToolCallbacks().length)
+                .sum();
+        assertThat(tools).isGreaterThanOrEqualTo(2);
     }
 }
